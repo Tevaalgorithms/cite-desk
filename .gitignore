@@ -35,3 +35,7 @@ apps/web/out/
 !/data/**/.gitkeep
 /evals/reports/
 .DS_Store
+
+# Local dev database
+*.db
+.data/

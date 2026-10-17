@@ -2,16 +2,22 @@
 
 A modular FastAPI monolith with background workers: simpler to run and test than separate services, and enough for the MVP. See the diagram in the README and the step-by-step flows in [`data-flow.md`](data-flow.md).
 
+## Implementation status
+
+| Built and tested (offline stand-ins, see ADR-012) | Planned |
+| --- | --- |
+| Shared models and interfaces, SQL repository (SQLite tested), parsing, chunking, safe URL fetching, draft/publish/unpublish with license gate and audit log, BM25, fusion, hybrid retrieval, relevance threshold, extractive writer, deterministic citation verifier, LangGraph answer flow with retry and refusal, CLI | FastAPI routes, auth and rate limits, Next.js chat and admin console, Pinecone, embedding, cross-encoder and LLM adapters, router and agent loop, answer cache, saved conversations, LangSmith tracing, RAGAS and DeepEval gates, Postgres migrations, PDF and DOCX parsing |
+
 ## Components
 
 | Component | Responsibility |
 | --- | --- |
 | `api` | Routes, auth (OIDC/JWT), rate limits, server-sent-event streaming |
-| `ingestion` | Source registry, safe fetchers, parsers, chunking, provenance, quality checks |
-| `retrieval` | BM25 index, Pinecone store, Reciprocal Rank Fusion, cross-encoder reranker |
-| `agents` | LangGraph answer flow, router, optional agent loop, step budget |
-| `citations` | Verifier and answer formatter |
-| `llm` | Model and embedding adapters behind interfaces |
+| `ingestion` | Safe URL fetching, parsing, chunking, the draft/publish workflow (source registry is planned) |
+| `answer` | BM25 index, Reciprocal Rank Fusion, hybrid retriever, reranker, answer writer, citation verifier, LangGraph answer flow |
+| `storage` | SQL repository and offline dev adapters (Pinecone and model adapters are planned) |
+| `domain` | Shared data models and the interfaces both sides depend on |
+| `bootstrap` | The only place that wires ingestion and the answer package together |
 | `evaluation` | RAGAS and DeepEval runners, thresholds, reports |
 | `db` | Schema and migrations |
 
@@ -19,11 +25,11 @@ A modular FastAPI monolith with background workers: simpler to run and test than
 
 | Stage | Choice | Reason |
 | --- | --- | --- |
-| Chunking | Section-aware; one chunk per heading section with a size cap and 15% overlap; each chunk keeps source, section path, page and character offsets | Questions target sections; citations need exact locations |
-| Keyword search | In-process BM25 over the chunk store, rebuilt on publish | Exact policy names, form names, numbers |
+| Chunking | Section-aware; one chunk per heading section with a size cap and a one-sentence overlap between consecutive chunks of a long section; each chunk keeps source, section path, page and character offsets | Questions target sections; citations need exact locations |
+| Keyword search | In-process BM25 over the published chunks, rebuilt by the answer package when the corpus version changes | Exact policy names, form names, numbers |
 | Vector search | Pinecone dense index with a metadata filter for published status | Meaning ("quit" matches "resignation") |
 | Fusion | Reciprocal Rank Fusion, k=60 | No score calibration across two scorers |
-| Rerank | Cross-encoder on the top 30 fused candidates; keep 6 to 8 | Largest single quality gain; adds a few hundred milliseconds |
+| Rerank | Cross-encoder on the top 30 fused candidates; keep the best 6 (configurable) | Largest single quality gain; adds a few hundred milliseconds |
 | Filters | Only published, current versions by default | Drafts never reach users |
 
 Limits: in-process BM25 suits roughly up to a million chunks and is rebuilt per instance; each worker must load the same corpus version. Past that scale, move keyword search behind the same interface to Pinecone sparse vectors or OpenSearch. The Pinecone free-tier limits must be checked at build time.
@@ -78,7 +84,7 @@ Lesson carried over from an earlier project: never reuse a LangGraph checkpoint 
 - Web import blocks private, loopback and metadata addresses, limits redirects, size and content types, and honours robots.txt.
 - Uploaded files are validated by type and size, stored privately and parsed in a sandboxed worker.
 - Retrieved text is untrusted: tools are chosen by code, never by document text. Prompt-injection documents are part of the evaluation set.
-- Secrets live in a secrets manager; gitleaks and dependency audits run on every pull request.
+- Secrets are read from environment variables and never stored in git or images. For the Lightsail MVP they come from a root-only environment file written at deploy time (see `deployment.md`); gitleaks and dependency audits run on every pull request.
 
 ## Observability
 

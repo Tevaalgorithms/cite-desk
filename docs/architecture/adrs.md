@@ -9,7 +9,7 @@ Status key: **Accepted** (decided), **Proposed** (recommended, needs confirmatio
 **Accepted.** BM25 handles exact policy and form names; vectors handle plain-language phrasing. Results are fused with Reciprocal Rank Fusion (k=60). Consequence: each worker must load the same corpus version; revisit at about a million chunks.
 
 ## ADR-003 — Cross-encoder reranking
-**Accepted.** Rerank the top 30 fused candidates and keep 6 to 8. Local model by default; adds a few hundred milliseconds.
+**Accepted.** Rerank the top 30 fused candidates and keep the best 6 (configurable). Local model by default; adds a few hundred milliseconds.
 
 ## ADR-004 — Model provider and data handling
 **Open.** OpenAI behind an interface is the working assumption. Before any real or confidential documents are loaded, decide hosted versus self-hosted models and retention settings. Until then only public or synthetic documents are used.
@@ -35,9 +35,21 @@ Status key: **Accepted** (decided), **Proposed** (recommended, needs confirmatio
 ## ADR-011 — Corpus licensing gate
 **Accepted.** No document is ingested until its license and terms URL are recorded and an admin marks it publishable. Restricted sources cannot be published.
 
+## ADR-012 — Offline stand-ins until the real adapters exist
+**Accepted.** The first implementation uses a hashing embedder, an in-memory vector index, a word-overlap reranker and an extractive answer writer so everything runs and tests offline. They are labelled as stand-ins in code. Retrieval and answer quality must not be judged until the Pinecone index, a real embedding model, a cross-encoder and an LLM writer replace them. The relevance threshold (`min_relevance`) is tuned to the overlap reranker and must be recalibrated with the cross-encoder. The default (0.5: a passage must cover at least half of the question's content words) is deliberately strict: with the stand-ins, rephrased questions are refused rather than answered from a loosely matching passage. This means the sample handbook only answers questions that reuse its wording.
+
+## ADR-013 — One SQL repository for SQLite and Postgres
+**Accepted.** SQLAlchemy serves SQLite for local work and tests, and Postgres (a free-tier managed instance is the intended first deployment) through the connection URL. Table creation at startup stands in for migrations, which are a later ticket. Pinecone remains a rebuildable copy, not the system of record.
+
+## ADR-014 — Verification checks faithfulness, not relevance
+**Accepted.** The citation verifier proves every sentence is supported by the passage it cites. It cannot tell whether the cited passage answers the question, so relevance is enforced separately (reranker score threshold, and the writer using only passages close to the best match). A test caught an unrelated passage passing verification; it is now a regression test.
+
+## ADR-015 — MVP hosting on a single Lightsail instance
+**Accepted.** The MVP runs on one Amazon Lightsail instance with Docker Compose, chosen for low, flat cost and minimal operations (starting plan $12 per month for 2 GB RAM, from AWS's pricing page read on 2026-10-17). Consequences: a single point of failure and downtime during deploys, accepted for the MVP. Secrets use a root-only environment file written by the deploy job, because Lightsail instance identity for SSM is unconfirmed. The database is an external free-tier Postgres, a Lightsail managed database ($15 per month and engine to be confirmed), or SQLite for a first single-instance deployment; the choice is still open. Move to ECS when more than one instance, zero-downtime deploys or role-based secrets are needed. Supersedes the "Hosting target" open question.
+
 ## Open questions
 
 1. Which corpus (see dataset feasibility) and under what attribution?
 2. Who reviews the golden questions?
 3. OpenAI only, or also Claude behind the same interface?
-4. Hosting target and evaluation budget cap.
+4. Which Postgres (free-tier provider, Lightsail managed database, or SQLite first), and the evaluation budget cap.

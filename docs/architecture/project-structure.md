@@ -4,14 +4,15 @@
 cite-desk/
   apps/web/                 Next.js: chat, admin console, quality dashboard
   src/citedesk/
-    api/                    FastAPI routes, auth, rate limits, streaming
-    ingestion/              sources, fetchers, parsers, chunking, provenance
-    retrieval/              BM25, Pinecone store, fusion (RRF), reranker
-    agents/                 LangGraph answer flow, router, step budget
-    citations/              verifier and answer formatter
-    llm/                    model and embedding adapters
-    evaluation/             RAGAS and DeepEval runners, thresholds, reports
-    db/                     schema and migrations
+    domain/                 shared data models and interfaces (ports)
+    ingestion/              parsing, chunking, safe URL fetching, publish workflow
+    answer/                 BM25, fusion, retrieval, rerankers, writers, verifier, LangGraph flow
+    storage/                SQL repository and offline dev adapters
+    bootstrap.py            the only place that wires ingestion and answer together
+    cli.py                  local command line
+    api/                    (planned) FastAPI routes, auth, rate limits, streaming
+    llm/                    (planned) OpenAI, Pinecone and cross-encoder adapters
+    evaluation/             (planned) RAGAS and DeepEval runners, thresholds, reports
   tests/                    unit and integration tests, deterministic fixtures
   evals/                    golden sets, thresholds.yaml, baselines, reports
   infrastructure/           docker, terraform
@@ -20,18 +21,18 @@ cite-desk/
   schemas/                  example manifests and eval cases
 ```
 
-Only the documentation and schemas exist today; code folders are added phase by phase per the roadmap.
+`domain`, `ingestion`, `answer`, `storage`, `bootstrap` and `cli` are implemented; the rest are added phase by phase per the roadmap.
 
 ## Dependency rules
 
-- `retrieval` never imports `agents`, `citations` or `api`.
-- `citations` never imports `retrieval`; it receives passages as input.
-- `agents` composes `retrieval`, `citations` and `llm`; nothing imports `agents` except `api`.
-- `ingestion` writes through `db` and the retrieval index interfaces; it never imports `agents`.
+- `ingestion` and `answer` never import each other, and neither imports `storage` or `bootstrap`. They talk to the database and indexes only through the interfaces in `domain/ports.py`.
+- `domain` imports nothing from the other packages. `storage` imports only `domain`.
+- Only `bootstrap.py` (and the CLI that calls it) knows every concrete class.
+- Each question runs in a fresh LangGraph run with no checkpointer, so nothing is shared between questions.
 - `evaluation` may import any module but is never imported by the application.
-- Retrievers, LLMs, vector store and cache sit behind interfaces so providers stay swappable.
+- Retrievers, LLMs, the vector store and the cache sit behind interfaces so providers stay swappable.
 
-These rules are enforced by a test that inspects imports, once code exists.
+`tests/unit/test_architecture_rules.py` enforces the first two rules by inspecting imports.
 
 ## Standards
 
