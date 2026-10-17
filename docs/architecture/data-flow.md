@@ -8,7 +8,7 @@ Three flows: content in, a question answered, and a code change gated.
 flowchart TD
     A["1. Admin adds content<br/>upload PDF/MD/DOCX or import a URL"] --> B["2. Fetch and parse<br/>safe fetch · clean text · skip duplicates"]
     B --> C["3. Chunk with provenance<br/>page · section · source · license · last updated"]
-    C --> D["4. Preview and publish<br/>admin approves; draft until then"]
+    C --> D["4. Preview and publish<br/>admin approves, draft until then"]
     D --> E["5. Index<br/>Pinecone vectors · BM25 index · new corpus version"]
     E --> F["6. Audit<br/>who, what, when"]
 ```

@@ -131,7 +131,7 @@ sequenceDiagram
     API->>PC: Upsert vectors with published metadata
     API->>BM: Rebuild keyword index from published chunks
     API->>PG: Mark published, bump corpus version, write audit log
-    API-->>Web: Published (new corpus version; cached answers invalidated)
+    API-->>Web: Published (new corpus version, cached answers invalidated)
     Note over API,PG: If any index step fails, the previous version stays live
 ```
 
