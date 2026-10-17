@@ -1,0 +1,12 @@
+[
+  {"id": "s-01", "question": "How many vacation days do I get?", "answerable": true, "expected_text": "20 days", "expected_section": "Time off > Vacation"},
+  {"id": "s-02", "question": "How many paid sick days do employees get?", "answerable": true, "expected_text": "10 paid sick days", "expected_section": "Time off > Sick leave"},
+  {"id": "s-03", "question": "How long is paid parental leave?", "answerable": true, "expected_text": "16 weeks", "expected_section": "Time off > Parental leave"},
+  {"id": "s-04", "question": "How many days a week may I work remotely?", "answerable": true, "expected_text": "three days", "expected_section": "Working hours > Remote work"},
+  {"id": "s-05", "question": "How much are meals reimbursed during business travel?", "answerable": true, "expected_text": "60 dollars", "expected_section": "Expenses > Meals"},
+  {"id": "s-06", "question": "When must I report a suspected security incident?", "answerable": true, "expected_text": "within 24 hours", "expected_section": "Security > Reporting incidents"},
+  {"id": "s-07", "question": "How long must passwords be?", "answerable": true, "expected_text": "14 characters", "expected_section": "Security > Passwords"},
+  {"id": "s-08", "question": "When do I need to return my laptop?", "answerable": true, "expected_text": "5 business days", "expected_section": "Equipment > Returning equipment"},
+  {"id": "s-09", "question": "What is the capital of France?", "answerable": false},
+  {"id": "s-10", "question": "What is the chief executive's salary?", "answerable": false}
+]

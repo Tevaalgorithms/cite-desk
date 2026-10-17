@@ -60,32 +60,14 @@ make check        # or: uv run ruff check . && uv run mypy && uv run pytest
 
 You should see Ruff pass, mypy report no issues, and all tests pass.
 
-### 5. Create a small sample handbook
+### 5. Use the sample handbook
 
-Any markdown file works. This one is made-up demo text:
-
-```bash
-cat > sample-handbook.md <<'EOF'
-# Acme Handbook (demo text)
-
-## Time off
-
-### Vacation
-
-Full-time employees receive 20 days of paid vacation each year. Unused vacation days carry over for up to 5 days into the next year.
-
-## Equipment
-
-### Returning equipment
-
-When you leave the company you must return your laptop within 5 business days. Contact IT to arrange a courier.
-EOF
-```
+The repo includes a small, made-up handbook at [`data/sample/acme-handbook.md`](data/sample/acme-handbook.md) (fictional company, released as CC0). Example questions with known answers are in [`evals/sample/questions.json`](evals/sample/questions.json).
 
 ### 6. Add it, review it, publish it
 
 ```bash
-uv run citedesk add sample-handbook.md --title "Acme Handbook" --license "demo text"
+uv run citedesk add data/sample/acme-handbook.md --title "Acme Handbook" --license "CC0 (synthetic sample)"
 ```
 
 This saves the file as a **draft**, so nobody can search it yet, and prints its id, for example `Added e94cbc1cfce6 (2 chunks, draft)`. Publishing requires a recorded `--license`; without one it is refused.
@@ -101,11 +83,11 @@ To add and publish in one command, put `--publish` on the `add` line.
 
 ```bash
 uv run citedesk ask "How many vacation days do I get?"
-uv run citedesk ask "When do I need to give back my laptop?"
+uv run citedesk ask "When do I need to return my laptop?"
 uv run citedesk ask "What is the capital of France?"
 ```
 
-The first two answer in the handbook's own words, with `[1]` markers and the section each came from. The third is not in the handbook, so CiteDesk says it can't answer.
+The first two answer in the handbook's own words, with `[1]` markers and the section each came from. The third is not in the handbook, so CiteDesk says it can't answer. Try the other questions in `evals/sample/questions.json` too.
 
 ### 8. Take a document down
 
@@ -141,7 +123,7 @@ Markdown (`.md`), HTML (`.html`) and plain text files are supported. PDF, DOCX a
 | `Record the document's license before publishing` | Re-add the file with `--license "..."` |
 | `Same content already added as document ...` | That file is already stored; use `list` to find its id |
 | `Only N characters of text found` | The file has too little text (error pages and empty files are rejected on purpose) |
-| An answer says it cannot answer | Check the document is published (`list`) and use words close to the handbook's |
+| An answer says it cannot answer | Check the document is published (`list`) and use words close to the handbook's. For example "parental leave" works where "time off for a baby" does not |
 
 ## What CiteDesk will do
 

@@ -13,7 +13,7 @@ class AnswerService:
         retriever: HybridRetriever,
         writer: AnswerWriter,
         *,
-        min_relevance: float = 0.3,
+        min_relevance: float = 0.5,
         max_attempts: int = 2,
     ) -> None:
         self._corpus_reader = corpus_reader

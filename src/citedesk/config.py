@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Passages scoring below this relevance after reranking are dropped, so the
     # assistant refuses instead of answering from unrelated text.
-    min_relevance: float = 0.3
+    min_relevance: float = 0.5
 
     # Chunking.
     chunk_max_chars: int = 1200
