@@ -2,57 +2,67 @@
 
 Three flows: content in, a question answered, and a code change gated.
 
+## Status
+
+Flows 1 and 2 are implemented in `src/citedesk/` and driven today by the command line. The API, auth, rate limits, answer cache, saved conversations, router and agent loop, and LangSmith tracing are planned and are marked as such below. Flow 3 is only partly implemented (see its note).
+
 ## 1. Content in (admin)
 
 ```mermaid
 flowchart TD
-    A["1. Admin adds content<br/>upload PDF/MD/DOCX or import a URL"] --> B["2. Fetch and parse<br/>safe fetch · clean text · skip duplicates"]
-    B --> C["3. Chunk with provenance<br/>page · section · source · license · last updated"]
-    C --> D["4. Preview and publish<br/>admin approves, draft until then"]
-    D --> E["5. Index<br/>Pinecone vectors · BM25 index · new corpus version"]
-    E --> F["6. Audit<br/>who, what, when"]
+    A["1. Admin adds content<br/>file or URL import"] --> B["2. Parse and check<br/>safe fetch for URLs · text checks · duplicate check"]
+    B --> C["3. Chunk by section<br/>each chunk keeps its section path"]
+    C --> D["4. Save as a draft<br/>not searchable yet"]
+    D --> E["5. Preview<br/>admin reviews the chunks"]
+    E --> F{"6. License recorded?"}
+    F -- no --> X["Publish refused"]
+    F -- yes --> G["7. Embed and index vectors"]
+    G --> H["8. Mark published<br/>corpus version +1 · audit log"]
 ```
 
 | Step | What happens | Failure handling |
 | --- | --- | --- |
-| Add | Upload or URL import | Reject disallowed types and oversized files |
-| Fetch and parse | http/https only; private and metadata addresses blocked; size and redirect limits; robots.txt honoured | Error and login pages are rejected by a minimum-text check; duplicates by content hash are flagged |
-| Chunk | Section-aware chunks keep source, section path, page, offsets, license and date | Parse failures leave the document in draft with the error shown |
-| Preview and publish | Admin can exclude chunks or the whole document | Nothing is retrievable until published |
-| Index | Embeds and indexes chunks, rebuilds BM25, bumps the corpus version, which invalidates cached answers | A failed index leaves the previous version live |
-| Rollback | One click restores the previous corpus version | Pinecone is rebuildable from Postgres chunks |
+| Add | Markdown, HTML or plain text from a file, or a web page by URL | Web pages with an unsupported content type are rejected. Local files with an unknown extension are read as plain text |
+| Parse and check | URLs: http/https only, public IP addresses only, every redirect rechecked, size limit, robots.txt honoured. Text: pages with too little text (error and login pages) are rejected, duplicates are found by content hash | `UnsafeUrlError`, `FetchError`, `ParseError`, `DuplicateDocumentError` |
+| Chunk | Sentence-aware chunks of at most about 1,200 characters, with one sentence of overlap inside long sections. Chunks never cross a section | A section with no text produces no chunk |
+| Save as draft | Document and chunks are stored and an `add` audit entry is written | Nothing is searchable yet |
+| Preview | The admin sees the chunks and their section paths | Planned: excluding single chunks |
+| License gate | Publishing needs a recorded license (ADR-011) | `PublishBlockedError`, document stays a draft |
+| Index | Chunk text is embedded and the vectors are upserted | If the upsert or the status change fails, the vectors are removed and the document stays a draft |
+| Publish | Status, corpus version and audit entry change in one transaction | Unpublish removes the vectors, marks the document retired and bumps the version |
+
+The keyword (BM25) index is **not** built by ingestion. The answer package rebuilds it on the next question after it sees a new corpus version, which keeps the two packages independent. Page numbers, chunk exclusion and PDF or DOCX parsing are planned.
 
 ## 2. A question answered (employee)
 
 ```mermaid
 flowchart TD
-    Q["1. Employee asks in chat"] --> R["2. Router (LangGraph)<br/>simple · multi-step · refuse"]
-    R --> BM["3a. BM25<br/>exact terms"]
-    R --> VS["3b. Vector search<br/>Pinecone"]
-    BM --> F["4. Fuse (RRF)"]
-    VS --> F
-    F --> RR["5. Cross-encoder rerank<br/>keep best 6 to 8"]
-    RR --> G["6. Model writes answer with [n] citations"]
-    G --> V{"7. Citation verifier<br/>every sentence supported?"}
-    V -- pass --> S["8. Stream answer<br/>citation chips + source drawer"]
-    V -- fail --> RT["Retry once with quotes only"]
-    RT --> V2{"Verifier again"}
-    V2 -- pass --> S
-    V2 -- fail --> X["Honest refusal"]
-    R -. multi-step .-> AG["Agent loop<br/>max 4 steps · 6 retrievals · 15 s"] -.-> BM
+    Q["1. Employee asks<br/>CLI today · chat UI planned"] --> V["2. Check the corpus version<br/>rebuild the keyword index if it changed"]
+    V --> BM["3. BM25 keyword search<br/>top 20"]
+    BM --> VS["4. Vector search<br/>top 20"]
+    VS --> F["5. Fuse with Reciprocal Rank Fusion<br/>best 30"]
+    F --> RR["6. Rerank, keep the best 6"]
+    RR --> T{"7. Any passage at or above<br/>the relevance threshold (0.5)?"}
+    T -- no --> R1["Refusal: nothing_relevant_found"]
+    T -- yes --> G["8. Writer drafts the answer with [n] citations"]
+    G --> C{"9. Citation verifier<br/>every sentence supported?"}
+    C -- pass --> S["10. Answer with citations"]
+    C -- "fail, first attempt" --> G2["Retry with the strict writer setting"]
+    G2 --> C
+    C -- "fail, second attempt" --> R2["Refusal: could_not_verify_answer"]
 ```
 
 | Step | Detail |
 | --- | --- |
-| Router | Classifies the question: single lookup, multi-step, or out of scope. Out-of-scope questions get a short decline with no retrieval |
-| Retrieve | BM25 and vector search run in parallel against published chunks only |
-| Fuse and rerank | Reciprocal Rank Fusion on the union, cross-encoder on the top 30, keep 6 to 8 |
-| Generate | The model sees numbered passages and must mark each sentence |
-| Verify | Deterministic checks first, then a support check for paraphrases |
-| Respond | Pass: stream with citations. Second failure: refuse and offer to flag a content gap |
-| Record | LangSmith trace and a stored message record (question hash, chunk ids, verification result, versions) |
+| Corpus version | The answer package asks the repository for the current version and reloads published passages only when it changed |
+| Retrieve | Keyword and vector search run one after the other over published chunks only. Vectors of content no longer published are ignored |
+| Fuse and rerank | Reciprocal Rank Fusion on both lists, then the reranker scores each passage 0 to 1 |
+| Relevance threshold | Passages below `min_relevance` (default 0.5) are dropped, so loosely matching text is refused rather than quoted |
+| Write | The writer sees numbered passages and must mark each sentence. The offline default quotes the best sentence of each close match |
+| Verify | Deterministic checks: every sentence cited, markers exist, quotes verbatim, numbers present in the cited passage, enough of the words supported |
+| Respond | Pass: answer plus citations. A second failure: refusal. Each question gets its own flow run, with no shared state |
 
-Cache: an exact-key answer cache keyed on normalized question, corpus version, and prompt and model versions. No semantic answer cache in the MVP.
+Planned and not built: a router that sends multi-step questions to a bounded agent loop, an exact-key answer cache, authentication and rate limits, saved conversations and feedback, and LangSmith traces.
 
 ## 3. A code change gated (developer)
 
@@ -70,3 +80,5 @@ flowchart TD
 ```
 
 Pull requests from forks run only steps 1 to 3, because repository secrets are not shared with forks.
+
+**Implemented today:** `.github/workflows/ci.yml` runs Ruff, strict mypy and pytest. The secret scan, dependency audit, retrieval metrics, RAGAS and DeepEval steps are planned.

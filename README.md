@@ -137,62 +137,79 @@ Markdown (`.md`), HTML (`.html`) and plain text files are supported. PDF, DOCX a
 
 ## Architecture
 
+Solid boxes are built and tested. Dashed boxes are planned (see [`docs/implementation/roadmap.md`](docs/implementation/roadmap.md)).
+
 ```mermaid
 graph TB
-    EMP(["Employee<br/>Next.js chat"])
-    ADM(["Admin<br/>Next.js console"])
-    API["FastAPI backend<br/>auth / RBAC · rate limits · streaming"]
+    EMP(["Employee"])
+    ADM(["Admin"])
+    CLI["CLI - built<br/>citedesk add · publish · ask"]
+    WEB["Next.js chat and admin console - planned"]:::planned
+    API["FastAPI - planned<br/>auth / RBAC · rate limits · streaming"]:::planned
 
-    subgraph ING["Ingestion path"]
-        ADD["Add content<br/>upload · URL import"] --> FETCH["Fetch and parse<br/>network guards · text checks · dedupe"] --> CHUNK["Chunk with provenance<br/>page · section · license · date"] --> PUB["Preview and publish<br/>draft until approved"] --> IDX["Index and version<br/>chunks · vectors · keyword index"]
+    subgraph ING["Ingestion package - built"]
+        ADD["Add content<br/>file · URL import"] --> FETCH["Parse and check<br/>safe fetch · text checks · duplicate check"] --> CHUNK["Chunk by section<br/>keeps the section path"] --> PUB["Preview, then publish<br/>license required · draft until approved"] --> IDX["Index vectors<br/>bump corpus version · audit log"]
     end
 
-    subgraph LG["LangGraph answer flow"]
-        ROUTE["Router<br/>simple · multi-step · refuse"]
-        BM["BM25<br/>in-process"]
-        VEC["Vector search<br/>Pinecone"]
+    subgraph ANS["Answer package - built"]
+        LOAD["Load published corpus<br/>rebuild BM25 when the version changes"]
+        BM["BM25 keyword search"]
+        VEC["Vector search"]
         RRF["RRF fusion"]
-        RR["Cross-encoder rerank<br/>top 30 to 6-8"]
-        GEN["Answer generation<br/>[n] citation markers"]
-        VER["Citation verifier<br/>every sentence supported?"]
-        AGT["Agent loop (optional)<br/>max 4 steps · 6 retrievals · 15 s"]
-        ROUTE --> BM & VEC
+        RR["Rerank, keep best 6<br/>drop below relevance 0.5"]
+        subgraph FLOW["LangGraph flow, a new run for every question"]
+            GEN["Write answer<br/>[n] citation markers"]
+            VER["Citation verifier<br/>every sentence supported?"]
+            GEN --> VER
+            VER -- "fail: retry once" --> GEN
+        end
+        ROUTE["Router and agent loop - planned<br/>multi-step questions"]:::planned
+        LOAD --> BM & VEC
         BM --> RRF
         VEC --> RRF
-        RRF --> RR --> GEN --> VER
-        ROUTE -. multi-step .-> AGT -.-> BM
+        RRF --> RR --> GEN
     end
 
-    PG[("Postgres<br/>documents · chunks · versions<br/>conversations · audit log")]
-    PC[("Pinecone<br/>dense vectors")]
+    SQL[("SQL database<br/>documents · chunks · audit log · corpus version<br/>SQLite tested · Postgres planned")]
+    VIDX[("Vector index<br/>in-memory stand-in · Pinecone planned")]
     OUT(["Answer with citations<br/>or honest refusal"])
-    LS[("LangSmith<br/>traces · experiments")]
+    LS[("LangSmith traces - planned")]:::planned
 
-    EMP --> API --> ROUTE
+    EMP --> CLI --> LOAD
+    ADM --> CLI --> ADD
+    EMP -.-> WEB -.-> API -.-> LOAD
     VER -- pass --> OUT
-    VER -- "fail: retry once, then refuse" --> OUT
-    ADM --> API --> ADD
-    IDX --> PG
-    IDX --> PC
-    BM --- PG
-    VEC --- PC
-    LG -.-> LS
+    VER -- "fail twice" --> OUT
+    RR -- "nothing relevant" --> OUT
+    IDX --> SQL
+    IDX --> VIDX
+    LOAD --- SQL
+    VEC --- VIDX
+    ANS -.-> LS
+    classDef planned stroke-dasharray: 5 5,stroke:#888
 ```
+
+Ingestion and the answer package never call each other. They meet only through the SQL database, the vector index and the shared interfaces in `src/citedesk/domain/ports.py`.
 
 ### Quality gate in CI
 
 ```mermaid
 graph LR
-    PR["Pull request"] --> S1["Lint · types · unit tests<br/>secret scan · dependency audit"]
-    S1 --> S2["Retrieval and citation checks<br/>fixed corpus snapshot"]
-    S2 --> S3["RAGAS + DeepEval<br/>36-question subset<br/>pinned judge · cached"]
+    PR["Pull request"] --> S1["Lint · types · unit tests<br/>built: .github/workflows/ci.yml"]
+    S1 --> S2["Secret scan · dependency audit<br/>planned"]:::planned
+    S2 --> S3["Retrieval metrics and RAGAS + DeepEval<br/>planned"]:::planned
     S3 --> G{"All gates<br/>pass?"}
     G -- yes --> M["Merge allowed"]
     G -- no --> F["Build fails<br/>metrics table on the PR"]
-    M --> N["Nightly: full set + ablation ladder<br/>results to LangSmith"]
+    M --> N["Nightly: full set + ablation ladder<br/>planned"]:::planned
+    classDef planned stroke-dasharray: 5 5,stroke:#888
 ```
 
+Today CI runs Ruff, strict mypy and pytest. The evaluation gates are designed in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md) but not implemented.
+
 ## Sequence diagrams
+
+These follow the code in `src/citedesk/`. Steps marked planned do not exist yet.
 
 ### Ingestion path (admin adds a document)
 
@@ -200,34 +217,39 @@ graph LR
 sequenceDiagram
     autonumber
     actor Admin
-    participant Web as Next.js console
-    participant API as FastAPI
-    participant Fetch as Fetcher and parser
-    participant PG as Postgres
-    participant Emb as Embedding model
-    participant PC as Pinecone
-    participant BM as BM25 index
+    participant Ing as IngestionService
+    participant Fetch as UrlFetcher
+    participant Repo as SQL repository
+    participant Emb as Embedder
+    participant Idx as Vector index
 
-    Admin->>Web: Upload file or paste URL
-    Web->>API: POST /v1/admin/documents or /imports
-    API->>API: Check role (admin) and file type and size
-    API->>Fetch: Fetch and parse
-    Note over Fetch: http/https only, private addresses blocked,<br/>size and redirect limits, robots.txt honoured
-    Fetch-->>API: Clean text, or rejection (error page, duplicate hash)
-    API->>PG: Save document as draft with source, license, content hash
-    API->>Fetch: Chunk by section with page and offsets
-    Fetch-->>API: Chunks with provenance
-    API->>PG: Save chunks (status draft)
-    API-->>Web: Preview of chunks
-    Admin->>Web: Review, exclude chunks, approve
-    Web->>API: POST /v1/admin/documents/{id}/publish
-    API->>Emb: Embed chunks
-    Emb-->>API: Vectors
-    API->>PC: Upsert vectors with published metadata
-    API->>BM: Rebuild keyword index from published chunks
-    API->>PG: Mark published, bump corpus version, write audit log
-    API-->>Web: Published (new corpus version, cached answers invalidated)
-    Note over API,PG: If any index step fails, the previous version stays live
+    Note over Admin,Ing: Today the CLI calls IngestionService directly. The admin console and API are planned.
+    Admin->>Ing: add_text (file) or add_url (web page)
+    opt URL import
+        Ing->>Fetch: fetch(url)
+        Note over Fetch: http/https only, public IPs only, every redirect rechecked, size limit, robots.txt honoured
+        Fetch-->>Ing: page text, or UnsafeUrlError / FetchError
+    end
+    Ing->>Ing: parse into sections (rejects pages with too little text)
+    Ing->>Repo: find_by_hash (duplicate check)
+    Ing->>Ing: chunk each section
+    Ing->>Repo: add_document as draft with its chunks (audit: add)
+    Ing-->>Admin: document id
+    Admin->>Ing: preview(id)
+    Ing-->>Admin: chunks with section paths
+    Admin->>Ing: publish(id)
+    Ing->>Ing: check that a license is recorded
+    Ing->>Emb: embed chunk texts
+    Ing->>Idx: upsert vectors
+    Ing->>Repo: transition to published (status, corpus version +1, audit) in one transaction
+    Note over Ing,Idx: If the upsert or the transition fails, the vectors are deleted and the document stays a draft
+    Ing-->>Admin: published
+    Note over Repo: The BM25 keyword index is not built here. The answer package rebuilds it when it sees the new corpus version.
+    opt take a document down
+        Admin->>Ing: unpublish(id)
+        Ing->>Idx: delete the document's vectors
+        Ing->>Repo: transition to retired (corpus version +1, audit)
+    end
 ```
 
 ### Retrieval and answer path (employee asks a question)
@@ -236,60 +258,50 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Emp as Employee
-    participant Web as Next.js chat
-    participant API as FastAPI
-    participant Graph as LangGraph router
+    participant Ans as AnswerService
+    participant Repo as SQL repository
+    participant Flow as LangGraph flow
+    participant Ret as HybridRetriever
     participant BM as BM25 index
-    participant PC as Pinecone
-    participant RR as Cross-encoder
-    participant LLM as Answer model
+    participant Idx as Vector index
+    participant RR as Reranker
+    participant W as Answer writer
     participant Ver as Citation verifier
-    participant PG as Postgres
-    participant LS as LangSmith
 
-    Emp->>Web: Ask a question
-    Web->>API: POST /v1/chat
-    API->>API: Authenticate, rate limit
-    API->>PG: Exact-key cache lookup (question, corpus and prompt versions)
-    alt cache hit
-        PG-->>API: Stored verified answer
-        API-->>Web: Stream cached answer with citations
-    else cache miss
-        API->>Graph: Start run with a new per-request thread id
-        Graph->>Graph: Classify: simple, multi-step or refuse
-        par keyword search
-            Graph->>BM: Query published chunks
-            BM-->>Graph: Ranked chunks
-        and vector search
-            Graph->>PC: Embed query and search published chunks
-            PC-->>Graph: Ranked chunks
-        end
-        Graph->>Graph: Fuse with Reciprocal Rank Fusion
-        Graph->>RR: Rerank top 30
-        RR-->>Graph: Best 6 to 8 passages
-        opt multi-step question
-            Graph->>Graph: Agent loop (max 4 steps, 6 retrievals, 15 s)
-        end
-        Graph->>LLM: Numbered passages and question
-        LLM-->>Graph: Draft answer with [n] markers
-        Graph->>Ver: Check every sentence
-        alt verified
-            Ver-->>Graph: Pass
-        else failed
-            Graph->>LLM: Retry once, quotes only
-            LLM-->>Graph: Second draft
-            Graph->>Ver: Check again
-            Ver-->>Graph: Pass or fail
-        end
-        Graph-->>API: Verified answer, or refusal
-        API->>PG: Store message record and cache verified answer
-        API-->>Web: Stream answer with citation chips
-        API-->>LS: Trace of every step
+    Note over Emp,Ans: Today the CLI calls AnswerService directly. Auth, rate limits, the answer cache, saved conversations and LangSmith tracing are planned.
+    Emp->>Ans: ask(question)
+    Ans->>Repo: corpus_version()
+    opt the version changed since the last question
+        Ans->>Repo: published_passages()
+        Ans->>BM: rebuild the keyword index
     end
-    Emp->>Web: Click a citation chip
-    Web->>API: GET /v1/chunks/{id}
-    API->>PG: Fetch published passage, page, section, last updated
-    API-->>Web: Source drawer at the exact passage
+    Ans->>Flow: start a new flow for this question (no shared state)
+    Flow->>Ret: retrieve(question)
+    Ret->>BM: keyword search (top 20)
+    Ret->>Idx: embed the question, vector search (top 20)
+    Ret->>Ret: fuse with Reciprocal Rank Fusion (best 30)
+    Ret->>RR: rerank
+    RR-->>Ret: passages with relevance scores
+    Ret-->>Flow: best 6 passages
+    Note over Flow,Ans: Passages below the relevance threshold (0.5) are dropped
+    alt no passages left
+        Flow-->>Emp: refusal (nothing_relevant_found)
+    else passages found
+        loop up to 2 attempts, stops when verified
+            Flow->>W: write(question, passages, strict on the retry)
+            W-->>Flow: draft with [n] markers
+            Flow->>Ver: verify every sentence
+            Ver-->>Flow: pass, or the list of problems
+        end
+        alt verified
+            Flow-->>Emp: answer with citations
+        else still unverified after 2 attempts
+            Flow-->>Emp: refusal (could_not_verify_answer)
+        end
+    end
+    Emp->>Ans: source_passage(chunk id)
+    Ans->>Repo: get_passage (published content only)
+    Repo-->>Emp: the passage, section and document for the source drawer
 ```
 
 ## Technology stack

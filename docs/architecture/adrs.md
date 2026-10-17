@@ -9,7 +9,7 @@ Status key: **Accepted** (decided), **Proposed** (recommended, needs confirmatio
 **Accepted.** BM25 handles exact policy and form names; vectors handle plain-language phrasing. Results are fused with Reciprocal Rank Fusion (k=60). Consequence: each worker must load the same corpus version; revisit at about a million chunks.
 
 ## ADR-003 — Cross-encoder reranking
-**Accepted.** Rerank the top 30 fused candidates and keep 6 to 8. Local model by default; adds a few hundred milliseconds.
+**Accepted.** Rerank the top 30 fused candidates and keep the best 6 (configurable). Local model by default; adds a few hundred milliseconds.
 
 ## ADR-004 — Model provider and data handling
 **Open.** OpenAI behind an interface is the working assumption. Before any real or confidential documents are loaded, decide hosted versus self-hosted models and retention settings. Until then only public or synthetic documents are used.
