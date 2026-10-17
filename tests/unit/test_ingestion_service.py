@@ -161,3 +161,27 @@ def test_a_failed_index_update_leaves_the_document_unpublished(app: App) -> None
 def test_unpublishing_a_draft_changes_nothing(app: App) -> None:
     document = _add(app)
     assert app.ingestion.unpublish(document.id, actor="tester").status is DocumentStatus.DRAFT
+
+
+def test_the_admins_title_wins_over_the_title_in_the_file(app: App) -> None:
+    document = app.ingestion.add_text(
+        SAMPLE_HANDBOOK,
+        content_type="markdown",
+        title="My own name for it",
+        source_name="tests",
+        actor="tester",
+        license="CC0",
+    )
+    assert document.title == "My own name for it"
+
+
+def test_without_a_title_the_one_in_the_file_is_used(app: App) -> None:
+    document = app.ingestion.add_text(
+        SAMPLE_HANDBOOK,
+        content_type="markdown",
+        title=None,
+        source_name="tests",
+        actor="tester",
+        license="CC0",
+    )
+    assert document.title == "Acme Handbook"

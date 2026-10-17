@@ -10,7 +10,7 @@ from citedesk.answer.service import AnswerService
 from citedesk.answer.writers import ExtractiveAnswerWriter
 from citedesk.config import Settings
 from citedesk.domain.models import searchable_text
-from citedesk.domain.ports import AnswerWriter, IndexItem
+from citedesk.domain.ports import AnswerWriter, Embedder, IndexItem, Reranker, VectorIndex
 from citedesk.ingestion.fetching import UrlFetcher
 from citedesk.ingestion.service import IngestionService
 from citedesk.storage.dev_adapters import HashingEmbedder, InMemoryVectorIndex
@@ -22,6 +22,10 @@ class App:
     ingestion: IngestionService
     answers: AnswerService
     repository: SqlRepository
+    # Exposed so the evaluation code can measure each retrieval stage on its own.
+    embedder: Embedder
+    index: VectorIndex
+    reranker: Reranker
 
 
 def build_app(settings: Settings | None = None, *, writer: AnswerWriter | None = None) -> App:
@@ -33,14 +37,14 @@ def build_app(settings: Settings | None = None, *, writer: AnswerWriter | None =
     """
     settings = settings or Settings()
     repository = SqlRepository.from_url(settings.database_url)
-    embedder = HashingEmbedder()
+    embedder, reranker = build_models(settings)
     index = InMemoryVectorIndex()
     _reload_index(repository, embedder, index)
 
     retriever = HybridRetriever(
         embedder,
         index,
-        OverlapReranker(),
+        reranker,
         candidate_limit=settings.candidate_limit,
         rerank_pool=settings.rerank_pool,
         final_limit=settings.final_passage_limit,
@@ -58,16 +62,27 @@ def build_app(settings: Settings | None = None, *, writer: AnswerWriter | None =
             repository,
             retriever,
             writer or ExtractiveAnswerWriter(),
-            min_relevance=settings.min_relevance,
+            min_relevance=settings.relevance_threshold,
             max_attempts=settings.max_answer_attempts,
         ),
         repository=repository,
+        embedder=embedder,
+        index=index,
+        reranker=reranker,
     )
 
 
-def _reload_index(
-    repository: SqlRepository, embedder: HashingEmbedder, index: InMemoryVectorIndex
-) -> None:
+def build_models(settings: Settings) -> tuple[Embedder, Reranker]:
+    """The embedding model and reranker for the chosen backend."""
+    if settings.models == "local":
+        # Imported here so the offline backend works without the optional `models` extra.
+        from citedesk.adapters.local_models import CrossEncoderReranker, FastEmbedEmbedder
+
+        return FastEmbedEmbedder(), CrossEncoderReranker()
+    return HashingEmbedder(), OverlapReranker()
+
+
+def _reload_index(repository: SqlRepository, embedder: Embedder, index: VectorIndex) -> None:
     passages = repository.published_passages()
     vectors = embedder.embed(
         [searchable_text(p.document_title, p.section_path, p.text) for p in passages]

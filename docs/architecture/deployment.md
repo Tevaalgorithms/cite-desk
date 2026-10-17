@@ -1,6 +1,6 @@
 # CiteDesk — Deployment
 
-**Decision for the MVP:** run on a single **Amazon Lightsail** instance with Docker Compose, chosen for low, flat cost (ADR-015). ECS or another managed container service is a later option, not part of the MVP. Nothing is provisioned yet.
+**Decision for the MVP:** run on a single **Amazon Lightsail** instance with Docker Compose, chosen for low, flat cost (ADR-015). ECS or another managed container service is a later option, not part of the MVP. Nothing is provisioned yet. The container images, the compose file and a post-deploy smoke test exist and were tested locally with Docker (see [`docs/operations/lightsail-deploy.md`](../operations/lightsail-deploy.md)); the Lightsail instance itself, HTTPS for a real domain and backups are untested.
 
 Three environments, one container image per service, and the same pipeline that runs the evaluation gates also deploys.
 
@@ -30,7 +30,7 @@ The relational data (documents, chunks, audit log, corpus version) needs a durab
 
 | Option | Monthly cost | Notes |
 | --- | --- | --- |
-| External free-tier Postgres | $0 | Matches the earlier preference. The provider and its limits (storage, pauses, connection counts) are **not yet checked** |
+| External free-tier Postgres | $0 | Matches the earlier preference. The code is tested on Postgres 16, but no provider has been chosen and its limits (storage, pauses, connection counts) are **not yet checked** |
 | Lightsail managed database | $15 for the smallest plan (1 GB RAM, 40 GB SSD) | The pricing page does not name the engine, so confirm that PostgreSQL is offered before choosing it |
 | SQLite file on the instance | $0 | Works for one instance only and needs snapshots for backup. Acceptable as a first deployment, not for a second instance |
 

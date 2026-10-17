@@ -42,6 +42,15 @@ class Chunk(_Frozen):
     text: str
 
 
+class AuditEntry(_Frozen):
+    """One recorded admin action."""
+
+    at: datetime
+    actor: str
+    action: str
+    target: str
+
+
 class Passage(_Frozen):
     """A chunk as the answer flow sees it: with its document title and a relevance score."""
 

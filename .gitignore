@@ -39,3 +39,7 @@ apps/web/out/
 # Local dev database
 *.db
 .data/
+
+# Browser test output
+apps/web/e2e-screenshots/
+apps/web/tsconfig.tsbuildinfo

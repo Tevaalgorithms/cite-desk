@@ -10,12 +10,14 @@ cite-desk/
     storage/                SQL repository and offline dev adapters
     bootstrap.py            the only place that wires ingestion and answer together
     cli.py                  local command line
-    api/                    (planned) FastAPI routes, auth, rate limits, streaming
+    api/                    FastAPI routes, dev sign-in tokens and roles, rate limits
     llm/                    (planned) OpenAI, Pinecone and cross-encoder adapters
     evaluation/             (planned) RAGAS and DeepEval runners, thresholds, reports
   tests/                    unit and integration tests, deterministic fixtures
   evals/                    golden sets, thresholds.yaml, baselines, reports
-  infrastructure/           docker, terraform
+  infrastructure/docker/    Dockerfiles for the API and web app, Caddy proxy config, compose file
+  scripts/                  smoke.sh (post-deploy checks)
+  infrastructure/terraform/ (planned)
   .github/workflows/        ci.yml, eval-pr.yml, eval-nightly.yml, deploy.yml
   docs/                     product, architecture, evaluation, implementation
   schemas/                  example manifests and eval cases

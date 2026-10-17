@@ -13,7 +13,13 @@ from citedesk.domain.models import Chunk, Document, DocumentStatus, Passage
 
 
 class Embedder(Protocol):
-    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Embed passages for indexing."""
+        ...
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a question. Some models use a different prompt for questions than for passages."""
+        ...
 
 
 class IndexItem(NamedTuple):
@@ -36,7 +42,10 @@ class VectorIndex(Protocol):
 
 class Reranker(Protocol):
     def rerank(self, question: str, passages: Sequence[Passage]) -> list[Passage]:
-        """Return the passages best-first, with `score` set to a 0..1 relevance."""
+        """Return the passages best-first, with `score` set to a relevance (higher is better).
+
+        The scale depends on the reranker, so the relevance threshold is set per backend.
+        """
         ...
 
 

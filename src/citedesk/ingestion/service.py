@@ -52,16 +52,22 @@ class IngestionService:
         content: str,
         *,
         content_type: ContentType,
-        title: str,
+        title: str | None,
         source_name: str,
         actor: str,
         license: str | None = None,
         terms_url: str | None = None,
         source_url: str | None = None,
     ) -> Document:
-        """Parse, chunk and store content as a draft. It is not searchable yet."""
+        """Parse, chunk and store content as a draft. It is not searchable yet.
+
+        The admin's `title` is used if given; otherwise the title found in the content.
+        """
         parsed = parse(
-            content, content_type, fallback_title=title, min_chars=self._min_document_chars
+            content,
+            content_type,
+            fallback_title=title or "Untitled document",
+            min_chars=self._min_document_chars,
         )
         content_hash = hashlib.sha256(" ".join(content.split()).encode()).hexdigest()
         existing = self._repository.find_by_hash(content_hash)
@@ -70,7 +76,7 @@ class IngestionService:
 
         document = Document(
             id=uuid.uuid4().hex[:12],
-            title=parsed.title,
+            title=title or parsed.title,
             source_name=source_name,
             source_url=source_url,
             license=license,
@@ -108,7 +114,7 @@ class IngestionService:
         return self.add_text(
             page.text,
             content_type=page.content_type,
-            title=url,
+            title=None,  # use the page's own title
             source_name=source_name,
             actor=actor,
             license=license,

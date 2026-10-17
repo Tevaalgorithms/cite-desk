@@ -1,6 +1,18 @@
 """Application settings, read from environment variables prefixed with CITEDESK_."""
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ModelBackend = Literal["offline", "local"]
+
+# Relevance thresholds only mean something for the reranker they were calibrated on.
+OFFLINE_MIN_RELEVANCE = 0.5
+# Calibrated with `citedesk eval-retrieval --models local` on the sample handbook: the strongest
+# unanswerable question scored -10.72 and the weakest answerable ones -10.6 and -10.9. -10.0 refuses
+# every known unanswerable question and costs the two hardest paraphrases. Only 6 unanswerable
+# questions were used, so re-check on a real handbook.
+LOCAL_MIN_RELEVANCE = -10.0
 
 
 class Settings(BaseSettings):
@@ -15,13 +27,35 @@ class Settings(BaseSettings):
     rerank_pool: int = 30
     final_passage_limit: int = 6
 
-    # Passages scoring below this relevance after reranking are dropped, so the
-    # assistant refuses instead of answering from unrelated text.
-    min_relevance: float = 0.5
+    # "offline": word-matching stand-ins, no downloads. "local": real embedding model and
+    # cross-encoder on this machine (needs `uv sync --extra models`).
+    models: ModelBackend = "offline"
+
+    # Passages scoring below this relevance after reranking are dropped, so the assistant
+    # refuses instead of answering from unrelated text. Leave unset to use the calibrated
+    # default for the chosen `models` backend.
+    min_relevance: float | None = None
 
     # Chunking.
     chunk_max_chars: int = 1200
     min_document_chars: int = 100
 
+    # --- web API ---
+    # Secret used to sign and check sign-in tokens in local development. The API refuses to
+    # start without it. In production, sign-in tokens should come from an OIDC provider (planned).
+    jwt_dev_secret: str | None = None
+    # Browser origins allowed to call the API (the web app).
+    cors_origins: list[str] = ["http://localhost:3000"]
+    # Serve the interactive API documentation at /docs (leave off in production).
+    enable_api_docs: bool = False
+    # Questions and admin actions allowed per signed-in user per minute.
+    rate_limit_per_minute: int = 30
+
     # How many times the writer may try before the assistant refuses.
     max_answer_attempts: int = 2
+
+    @property
+    def relevance_threshold(self) -> float:
+        if self.min_relevance is not None:
+            return self.min_relevance
+        return LOCAL_MIN_RELEVANCE if self.models == "local" else OFFLINE_MIN_RELEVANCE

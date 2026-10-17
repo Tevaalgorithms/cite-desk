@@ -1,0 +1,53 @@
+# Run the whole stack:
+#   cp .env.example .env     # then fill in CITEDESK_JWT_DEV_SECRET and CITEDESK_DATABASE_URL
+#   docker compose -f infrastructure/docker/compose.yml --env-file .env up -d --build
+# Add `--profile local-db` to also start a Postgres container for trying it out (not for production).
+name: citedesk
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.Dockerfile
+    restart: unless-stopped
+    env_file: ../../.env
+    environment:
+      # The proxy serves the API and the web app on one address, so no cross-site calls happen.
+      CITEDESK_CORS_ORIGINS: '[]'
+    expose: ["8000"]
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ""
+    restart: unless-stopped
+    expose: ["3000"]
+
+  proxy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on: [api, web]
+    ports:
+      - "${CITEDESK_HTTP_PORT:-80}:80"
+      - "${CITEDESK_HTTPS_PORT:-443}:443"
+    environment:
+      CITEDESK_SITE: ${CITEDESK_SITE:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+  postgres:
+    profiles: [local-db]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${CITEDESK_LOCAL_DB_PASSWORD:?set CITEDESK_LOCAL_DB_PASSWORD to use the local-db profile}
+      POSTGRES_DB: citedesk
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  caddy_data:
+  pgdata:

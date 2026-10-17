@@ -26,6 +26,9 @@ class HashingEmbedder:
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         return [self._embed_one(text) for text in texts]
 
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed_one(text)
+
     def _embed_one(self, text: str) -> list[float]:
         vector = [0.0] * self._dimension
         for token in content_tokens(text):

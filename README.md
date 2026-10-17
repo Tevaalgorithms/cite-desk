@@ -2,7 +2,7 @@
 
 CiteDesk is a company-handbook assistant: employees ask questions in plain language and get answers where **every sentence cites the exact handbook passage it came from**. If the handbook does not support an answer, CiteDesk says so instead of guessing.
 
-**Status:** backend core implemented and tested (ingestion, hybrid retrieval, citation verifier, LangGraph answer flow, CLI) using offline stand-ins for the vector database, embeddings and reranker. Not built yet: API, auth, web app, Pinecone and OpenAI adapters, cross-encoder, evaluation pipeline.  
+**Status:** backend core implemented and tested (ingestion, hybrid retrieval, citation verifier, LangGraph answer flow, CLI, retrieval and answer evaluation with quality gates). Runs on offline stand-ins by default or on real local embedding and cross-encoder models. Also a FastAPI layer with signed-in roles and rate limits. Also a Next.js web app: chat with citation chips and a source drawer, and an admin console. Not built yet: Pinecone and OpenAI adapters, RAGAS and DeepEval, OIDC sign-in, streaming answers, the quality dashboard.  
 **Design baseline:** October 17, 2026  
 **Demo corpus:** an openly licensed company handbook, to be chosen after its reuse terms are verified (see [`docs/product/dataset-feasibility.md`](docs/product/dataset-feasibility.md)). Nothing has been downloaded or ingested.
 
@@ -110,9 +110,89 @@ Markdown (`.md`), HTML (`.html`) and plain text files are supported. PDF, DOCX a
 - To start fresh, delete that file. To use another location: `export CITEDESK_DATABASE_URL="sqlite:////full/path/to/file.db"`.
 - The vector index is rebuilt in memory every time a command starts.
 
+### Run the web app
+
+Needs Node 22 or newer. With the API from the previous step running on port 8000:
+
+```bash
+cd apps/web
+npm install
+npm run dev                      # http://localhost:3000
+```
+
+Sign in by pasting a token from `uv run citedesk token --user you --role analyst` (use `--role admin` for the Admin page). As an admin, add `data/sample/acme-handbook.md`, give it a license, preview it and publish it; then ask questions as an analyst and click a numbered citation to see the source passage. The API address defaults to `http://localhost:8000`; set `NEXT_PUBLIC_API_URL` to change it, and add the web address to `CITEDESK_CORS_ORIGINS` if it is not `http://localhost:3000`.
+
+Checks (from `apps/web`): `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run e2e`, which starts its own API and web server and drives a real browser through sign-in, upload, publish, a cited answer, the source drawer and unpublish (needs `npx playwright install chromium` once).
+
+### Use the real local models (optional)
+
+The default `offline` backend uses word-matching stand-ins. To use a real embedding model and cross-encoder that run on your machine (no API key; model files are downloaded on first use, size not measured):
+
+```bash
+uv sync --extra models
+export CITEDESK_MODELS=local
+uv run citedesk add data/sample/acme-handbook.md --title "Acme" --license "CC0 (synthetic sample)" --publish
+uv run citedesk ask "How much time off do I get when I have a baby?"   # a paraphrase the stand-ins refuse
+```
+
+### Use Postgres instead of SQLite (optional)
+
+```bash
+uv sync --extra postgres
+docker run -d --rm --name citedesk-pg -e POSTGRES_PASSWORD=<pick a password> -p 55432:5432 postgres:16-alpine
+export CITEDESK_DATABASE_URL="postgresql+psycopg://postgres:<the password>@localhost:55432/postgres"
+uv run citedesk list            # creates the tables on first use
+
+# run the Postgres tests
+CITEDESK_TEST_POSTGRES_URL="$CITEDESK_DATABASE_URL" uv run pytest tests/integration
+```
+
+Tables are created automatically on first start; schema migrations are not implemented yet.
+
+### Run everything in Docker
+
+```bash
+cp .env.example .env     # then set CITEDESK_JWT_DEV_SECRET (see the comment in the file)
+export CITEDESK_LOCAL_DB_PASSWORD=<pick a password>      # for the bundled trial Postgres
+# in .env, point the database at it:
+# CITEDESK_DATABASE_URL=postgresql+psycopg://postgres:<that password>@postgres:5432/citedesk
+docker compose -f infrastructure/docker/compose.yml --env-file .env --profile local-db up -d --build
+scripts/smoke.sh http://localhost                         # quick health and security checks
+```
+
+This starts the API, the web app and a Caddy proxy on one address (port 80), plus a trial Postgres with the `local-db` profile. For the Lightsail deployment steps see [`docs/operations/lightsail-deploy.md`](docs/operations/lightsail-deploy.md).
+
+### Run the web API
+
+```bash
+export CITEDESK_JWT_DEV_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+uv run citedesk serve                      # http://127.0.0.1:8000
+
+# in another terminal, with the same CITEDESK_JWT_DEV_SECRET exported
+ADMIN=$(uv run citedesk token --user alice --role admin)
+ANALYST=$(uv run citedesk token --user bob --role analyst)
+curl -s localhost:8000/health
+curl -s -X POST localhost:8000/v1/chat -H "Authorization: Bearer $ANALYST" \
+  -H 'content-type: application/json' -d '{"question":"How many vacation days do I get?"}'
+```
+
+Chat and source passages need any signed-in role; document management and the audit log need `admin`. Tokens are for local development only: production should verify tokens from an OIDC provider (planned). Set `CITEDESK_ENABLE_API_DOCS=true` to see interactive docs at `/docs`. Endpoints are listed in [`docs/architecture/technical-architecture.md`](docs/architecture/technical-architecture.md).
+
+### Measure quality
+
+```bash
+uv run citedesk eval-retrieval --models offline                    # stand-ins
+uv run --extra models citedesk eval-retrieval --models local       # real models
+uv run --extra models citedesk eval-retrieval --models local --golden evals/sample/heldout.json
+uv run --extra models citedesk eval-retrieval --models local --check evals/baselines.json   # quality gate
+```
+
+It prints Recall@1/3/5 and MRR for each retrieval stage, the relevance-threshold calibration, and how many answers were correct, refused or wrongly cited. Results and their limits are in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md).
+
 ### Good to know
 
-- The offline stand-ins match on shared words only, so a question phrased with different words than the handbook may be refused. This is expected until the real embedding model and reranker are added.
+- The default offline stand-ins match on shared words only, so a question phrased with different words than the handbook may be refused. Use the real local models (above) for paraphrases.
+- Even with real models, a question the handbook cannot answer can be answered from a nearby section (for example asking about cafeteria prices when only travel meals are covered). The cited passage is shown so you can see this; fixing it needs the language-model writer.
 - There is no web chat, API or admin screen yet. See the roadmap.
 
 ### Troubleshooting
@@ -170,7 +250,7 @@ graph TB
         RRF --> RR --> GEN
     end
 
-    SQL[("SQL database<br/>documents · chunks · audit log · corpus version<br/>SQLite tested · Postgres planned")]
+    SQL[("SQL database<br/>documents · chunks · audit log · corpus version<br/>SQLite and Postgres tested")]
     VIDX[("Vector index<br/>in-memory stand-in · Pinecone planned")]
     OUT(["Answer with citations<br/>or honest refusal"])
     LS[("LangSmith traces - planned")]:::planned
@@ -195,8 +275,8 @@ Ingestion and the answer package never call each other. They meet only through t
 
 ```mermaid
 graph LR
-    PR["Pull request"] --> S1["Lint · types · unit tests<br/>built: .github/workflows/ci.yml"]
-    S1 --> S2["Secret scan · dependency audit<br/>planned"]:::planned
+    PR["Pull request"] --> S1["Lint · types · tests · secret scan<br/>built: .github/workflows/ci.yml"]
+    S1 --> S2["Dependency audit<br/>planned"]:::planned
     S2 --> S3["Retrieval metrics and RAGAS + DeepEval<br/>planned"]:::planned
     S3 --> G{"All gates<br/>pass?"}
     G -- yes --> M["Merge allowed"]
@@ -205,7 +285,7 @@ graph LR
     classDef planned stroke-dasharray: 5 5,stroke:#888
 ```
 
-Today CI runs Ruff, strict mypy and pytest. The evaluation gates are designed in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md) but not implemented.
+Today CI runs Ruff, strict mypy and pytest, the web checks, a browser end-to-end test, the Postgres tests, the real-model quality gates, an image build and a gitleaks secret scan. The RAGAS and DeepEval gates are designed in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md) but not implemented.
 
 ## Sequence diagrams
 
@@ -317,25 +397,27 @@ sequenceDiagram
 | Metadata store | PostgreSQL |
 | Observability | LangSmith, OpenTelemetry, structured logs |
 | Evaluation | RAGAS, DeepEval, pytest, GitHub Actions |
-| Frontend | Next.js, TypeScript, Tailwind, shadcn/ui |
+| Frontend | Next.js, React, TypeScript, plain CSS |
 | Quality tooling | Ruff, strict mypy, pytest, Vitest, Playwright, gitleaks, pip-audit, npm audit |
 
 ## Repository structure
 
 ```text
 cite-desk/
-  apps/web/                 Next.js: chat, admin console, quality dashboard
+  apps/web/                 Next.js: chat, admin console (quality dashboard planned)
   src/citedesk/
     domain/                 shared data models and interfaces (ports)      [built]
     ingestion/              parse, chunk, safe URL fetch, publish workflow [built]
     answer/                 BM25, fusion, retrieval, writer, verifier, LangGraph flow [built]
     storage/                SQL repository, offline dev adapters           [built]
     bootstrap.py, cli.py    wiring and command line                        [built]
-    api/                    FastAPI routes, auth, rate limits, streaming   [planned]
+    api/                    FastAPI routes, dev sign-in tokens and roles, rate limits  [built]
     llm/                    OpenAI, Pinecone and cross-encoder adapters    [planned]
     evaluation/             RAGAS and DeepEval runners, thresholds         [planned]
   evals/                    golden sets, thresholds, baselines
-  infrastructure/           docker, terraform
+  infrastructure/docker/    Dockerfiles, Caddy proxy config and compose file  [built]
+  infrastructure/terraform/ (planned)
+  scripts/                  smoke.sh: post-deploy checks
   .github/workflows/        CI, PR evaluation, nightly evaluation, deploy
   docs/                     product, architecture, evaluation, implementation
   schemas/                  example manifests and eval cases

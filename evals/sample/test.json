@@ -1,0 +1,102 @@
+[
+  {
+    "id": "t-a01",
+    "category": "paraphrase",
+    "question": "How long can maternity or paternity leave last?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Parental leave"
+    ]
+  },
+  {
+    "id": "t-a02",
+    "category": "paraphrase",
+    "question": "Does the company pay me when I am off sick?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Sick leave"
+    ]
+  },
+  {
+    "id": "t-a03",
+    "category": "paraphrase",
+    "question": "What is the limit on what I can claim for food while travelling?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Meals"
+    ]
+  },
+  {
+    "id": "t-a04",
+    "category": "paraphrase",
+    "question": "Do I need approval to work from my house?",
+    "answerable": true,
+    "gold_sections": [
+      "Working hours > Remote work"
+    ]
+  },
+  {
+    "id": "t-a05",
+    "category": "paraphrase",
+    "question": "Who do I call when my computer is lost?",
+    "answerable": true,
+    "gold_sections": [
+      "Equipment > Laptops"
+    ]
+  },
+  {
+    "id": "t-a06",
+    "category": "paraphrase",
+    "question": "Are two-factor logins mandatory?",
+    "answerable": true,
+    "gold_sections": [
+      "Security > Passwords"
+    ]
+  },
+  {
+    "id": "t-a07",
+    "category": "paraphrase",
+    "question": "How many national holidays are there each year?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Public holidays"
+    ]
+  },
+  {
+    "id": "t-a08",
+    "category": "paraphrase",
+    "question": "What is the deadline for submitting what I spent on a trip?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Receipts"
+    ]
+  },
+  {
+    "id": "t-u01",
+    "category": "unanswerable",
+    "question": "Is the office dog friendly?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "t-u02",
+    "category": "unanswerable",
+    "question": "How much does the cafeteria lunch cost?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "t-u03",
+    "category": "unanswerable",
+    "question": "What programming languages does the company use?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "t-u04",
+    "category": "unanswerable",
+    "question": "When is the annual company party?",
+    "answerable": false,
+    "gold_sections": []
+  }
+]

@@ -2,6 +2,32 @@
 
 Every pull request is scored on retrieval, answer quality and citations, and the build fails when a gate is missed. Deterministic checks catch most regressions for free; RAGAS and DeepEval add judged metrics on a small, cached set.
 
+## What is implemented today
+
+`citedesk eval-retrieval` (see the README) measures, without any API key:
+
+- **Retrieval by stage:** keyword only, vector only, both fused, and fused + reranked. Reported as Recall@1, @3, @5 and MRR, split by question type (exact wording versus paraphrase).
+- **Answers:** whether the right section was cited, refusals of unanswerable questions, and "confidently wrong" answers (cited the wrong section, or answered an unanswerable question).
+- **Threshold calibration:** the top reranker score of every question, so the relevance threshold comes from data.
+- **Gates:** `--check evals/baselines.json` exits 1 if recall, MRR or correct answers fall below the recorded floor, or if confidently-wrong answers rise above the recorded ceiling. The offline backend is gated in the normal test suite; the local backend is gated by `tests/models` and by a separate CI job.
+
+Not implemented yet: RAGAS and DeepEval (they need an LLM judge and an API key), the 120-question golden set reviewed by a person, and the nightly ablation run. The sample sets are small (27, 12 and 12 questions), written by the same author as the handbook, and the handbook is synthetic, so they show that the pipeline works and which stage helps, not how it will perform on a real handbook.
+
+## Measured results on the sample handbook
+
+Real local models versus the offline stand-ins, final pipeline (fused + reranked), answerable questions:
+
+| Question set | What it is | Backend | Right section first | In top 3 | Answered correctly | Cited wrong section or answered an unanswerable question |
+| --- | --- | --- | --- | --- | --- | --- |
+| `golden` (21 answerable, 6 not) | Used to calibrate the threshold, so optimistic | offline | 0.81 | 0.90 | 13 of 21 | 1 |
+| | | local | 0.95 | 1.00 | 19 of 21 | 0 |
+| `heldout` (8 answerable, 4 not) | Used for diagnosis, now a validation set | offline | 0.63 | 0.63 | 3 of 8 | 1 |
+| | | local | 0.88 | 1.00 | 6 of 8 | 2 |
+| `test` (8 answerable, 4 not) | Unseen, run once | offline | 0.88 | 0.88 | 2 of 8 | 0 |
+| | | local | 1.00 | 1.00 | 8 of 8 | 1 |
+
+Reading it: the real models clearly beat the stand-ins on finding the right section and on answering paraphrased questions. Both still sometimes answer an unanswerable question that is close to a covered topic (2 of 14 unanswerable questions across the local runs). Before reranking, plain vector search beat the fused keyword-plus-vector ranking on paraphrases (Recall@1 0.90 versus 0.81 on `golden`), and the reranker repaired that, which is why hybrid retrieval is only worth it with a reranker here.
+
 ## Metrics and starting gates
 
 These thresholds are **starting guesses**. They are calibrated on the first measured baseline and then ratcheted up, never loosened to make a failing run pass.

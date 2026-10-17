@@ -6,7 +6,7 @@ A modular FastAPI monolith with background workers: simpler to run and test than
 
 | Built and tested (offline stand-ins, see ADR-012) | Planned |
 | --- | --- |
-| Shared models and interfaces, SQL repository (SQLite tested), parsing, chunking, safe URL fetching, draft/publish/unpublish with license gate and audit log, BM25, fusion, hybrid retrieval, relevance threshold, extractive writer, deterministic citation verifier, LangGraph answer flow with retry and refusal, CLI | FastAPI routes, auth and rate limits, Next.js chat and admin console, Pinecone, embedding, cross-encoder and LLM adapters, router and agent loop, answer cache, saved conversations, LangSmith tracing, RAGAS and DeepEval gates, Postgres migrations, PDF and DOCX parsing |
+| Shared models and interfaces, SQL repository (tested on SQLite and Postgres 16), parsing, chunking, safe URL fetching, draft/publish/unpublish with license gate and audit log, BM25, fusion, hybrid retrieval, relevance threshold, extractive writer, deterministic citation verifier, LangGraph answer flow with retry and refusal, CLI, local embedding and cross-encoder models, evaluation harness with gates, FastAPI API with signed-in roles, rate limits and security headers, Next.js chat (citation chips, source drawer) and admin console, browser end-to-end tests | OIDC sign-in, streaming answers, feedback endpoint, saved conversations, the quality dashboard, Pinecone, embedding, cross-encoder and LLM adapters, router and agent loop, answer cache, saved conversations, LangSmith tracing, RAGAS and DeepEval gates, database migrations, PDF and DOCX parsing |
 
 ## Components
 
@@ -69,7 +69,7 @@ Lesson carried over from an earlier project: never reuse a LangGraph checkpoint 
 | --- | --- | --- |
 | `POST /v1/chat` | Ask a question; stream the answer with citations | Employee |
 | `GET /v1/chunks/{id}` | Passage for the source drawer | Employee (published only) |
-| `POST /v1/feedback` | Thumbs up or down with a note | Employee |
+| `POST /v1/feedback` | Thumbs up or down with a note (planned) | Employee |
 | `POST /v1/admin/documents`, `/imports` | Upload a file or import a URL | Admin |
 | `GET /v1/admin/documents/{id}/preview` | Parsed chunks before publishing | Admin |
 | `POST /v1/admin/documents/{id}/publish` (and unpublish, rollback) | Publish control | Admin |
