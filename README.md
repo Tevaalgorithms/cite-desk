@@ -97,6 +97,106 @@ graph LR
     M --> N["Nightly: full set + ablation ladder<br/>results to LangSmith"]
 ```
 
+## Sequence diagrams
+
+### Ingestion path (admin adds a document)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant Web as Next.js console
+    participant API as FastAPI
+    participant Fetch as Fetcher and parser
+    participant PG as Postgres
+    participant Emb as Embedding model
+    participant PC as Pinecone
+    participant BM as BM25 index
+
+    Admin->>Web: Upload file or paste URL
+    Web->>API: POST /v1/admin/documents or /imports
+    API->>API: Check role (admin) and file type and size
+    API->>Fetch: Fetch and parse
+    Note over Fetch: http/https only, private addresses blocked,<br/>size and redirect limits, robots.txt honoured
+    Fetch-->>API: Clean text, or rejection (error page, duplicate hash)
+    API->>PG: Save document as draft with source, license, content hash
+    API->>Fetch: Chunk by section with page and offsets
+    Fetch-->>API: Chunks with provenance
+    API->>PG: Save chunks (status draft)
+    API-->>Web: Preview of chunks
+    Admin->>Web: Review, exclude chunks, approve
+    Web->>API: POST /v1/admin/documents/{id}/publish
+    API->>Emb: Embed chunks
+    Emb-->>API: Vectors
+    API->>PC: Upsert vectors with published metadata
+    API->>BM: Rebuild keyword index from published chunks
+    API->>PG: Mark published, bump corpus version, write audit log
+    API-->>Web: Published (new corpus version; cached answers invalidated)
+    Note over API,PG: If any index step fails, the previous version stays live
+```
+
+### Retrieval and answer path (employee asks a question)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Emp as Employee
+    participant Web as Next.js chat
+    participant API as FastAPI
+    participant Graph as LangGraph router
+    participant BM as BM25 index
+    participant PC as Pinecone
+    participant RR as Cross-encoder
+    participant LLM as Answer model
+    participant Ver as Citation verifier
+    participant PG as Postgres
+    participant LS as LangSmith
+
+    Emp->>Web: Ask a question
+    Web->>API: POST /v1/chat
+    API->>API: Authenticate, rate limit
+    API->>PG: Exact-key cache lookup (question, corpus and prompt versions)
+    alt cache hit
+        PG-->>API: Stored verified answer
+        API-->>Web: Stream cached answer with citations
+    else cache miss
+        API->>Graph: Start run with a new per-request thread id
+        Graph->>Graph: Classify: simple, multi-step or refuse
+        par keyword search
+            Graph->>BM: Query published chunks
+            BM-->>Graph: Ranked chunks
+        and vector search
+            Graph->>PC: Embed query and search published chunks
+            PC-->>Graph: Ranked chunks
+        end
+        Graph->>Graph: Fuse with Reciprocal Rank Fusion
+        Graph->>RR: Rerank top 30
+        RR-->>Graph: Best 6 to 8 passages
+        opt multi-step question
+            Graph->>Graph: Agent loop (max 4 steps, 6 retrievals, 15 s)
+        end
+        Graph->>LLM: Numbered passages and question
+        LLM-->>Graph: Draft answer with [n] markers
+        Graph->>Ver: Check every sentence
+        alt verified
+            Ver-->>Graph: Pass
+        else failed
+            Graph->>LLM: Retry once, quotes only
+            LLM-->>Graph: Second draft
+            Graph->>Ver: Check again
+            Ver-->>Graph: Pass or fail
+        end
+        Graph-->>API: Verified answer, or refusal
+        API->>PG: Store message record and cache verified answer
+        API-->>Web: Stream answer with citation chips
+        API-->>LS: Trace of every step
+    end
+    Emp->>Web: Click a citation chip
+    Web->>API: GET /v1/chunks/{id}
+    API->>PG: Fetch published passage, page, section, last updated
+    API-->>Web: Source drawer at the exact passage
+```
+
 ## Technology stack
 
 | Layer | Choice |
