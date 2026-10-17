@@ -19,7 +19,7 @@ A modular FastAPI monolith with background workers: simpler to run and test than
 
 | Stage | Choice | Reason |
 | --- | --- | --- |
-| Chunking | Section-aware; one chunk per heading section with a size cap and 15% overlap; each chunk keeps source, section path, page and character offsets | Questions target sections; citations need exact locations |
+| Chunking | Section-aware; one chunk per heading section with a size cap and a one-sentence overlap between consecutive chunks of a long section; each chunk keeps source, section path, page and character offsets | Questions target sections; citations need exact locations |
 | Keyword search | In-process BM25 over the chunk store, rebuilt on publish | Exact policy names, form names, numbers |
 | Vector search | Pinecone dense index with a metadata filter for published status | Meaning ("quit" matches "resignation") |
 | Fusion | Reciprocal Rank Fusion, k=60 | No score calibration across two scorers |

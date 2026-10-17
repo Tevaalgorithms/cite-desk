@@ -2,7 +2,7 @@
 
 CiteDesk is a company-handbook assistant: employees ask questions in plain language and get answers where **every sentence cites the exact handbook passage it came from**. If the handbook does not support an answer, CiteDesk says so instead of guessing.
 
-**Status:** specification and scaffold only; no application code yet.  
+**Status:** backend core implemented and tested (ingestion, hybrid retrieval, citation verifier, LangGraph answer flow, CLI) using offline stand-ins for the vector database, embeddings and reranker. Not built yet: API, auth, web app, Pinecone and OpenAI adapters, cross-encoder, evaluation pipeline.  
 **Design baseline:** October 17, 2026  
 **Demo corpus:** an openly licensed company handbook, to be chosen after its reuse terms are verified (see [`docs/product/dataset-feasibility.md`](docs/product/dataset-feasibility.md)). Nothing has been downloaded or ingested.
 
@@ -29,6 +29,23 @@ The first release includes a head-to-head against a plain chatbot (see the evalu
 8. [`docs/implementation/roadmap.md`](docs/implementation/roadmap.md) — phases, gates and definition of done.
 9. [`docs/architecture/adrs.md`](docs/architecture/adrs.md) — decisions and open questions.
 10. [`schemas/eval-case.example.json`](schemas/eval-case.example.json) and [`schemas/dataset-manifest.example.yaml`](schemas/dataset-manifest.example.yaml) — example shapes.
+
+## Run it locally
+
+Needs [`uv`](https://docs.astral.sh/uv/). No API keys are required: the core runs on offline stand-ins.
+
+```bash
+uv sync
+make check                       # ruff, strict mypy, pytest
+
+# try it end to end with any markdown file (SQLite database in the current folder)
+uv run citedesk add handbook.md --title "My handbook" --license "CC0" --publish
+uv run citedesk ask "How many vacation days do I get?"
+uv run citedesk list
+```
+
+Publishing requires a recorded license. The offline stand-ins match on shared words only, so quality
+testing waits for the real embedding model and cross-encoder (see [`docs/implementation/roadmap.md`](docs/implementation/roadmap.md)).
 
 ## What CiteDesk will do
 
@@ -219,14 +236,14 @@ sequenceDiagram
 cite-desk/
   apps/web/                 Next.js: chat, admin console, quality dashboard
   src/citedesk/
-    api/                    FastAPI routes, auth, rate limits, streaming
-    ingestion/              sources, fetchers, parsers, chunking, provenance
-    retrieval/              BM25, Pinecone store, fusion, reranker
-    agents/                 LangGraph answer flow, router, step budget
-    citations/              verifier and answer formatter
-    llm/                    model and embedding adapters
-    evaluation/             RAGAS and DeepEval runners, thresholds, reports
-    db/                     schema and migrations
+    domain/                 shared data models and interfaces (ports)      [built]
+    ingestion/              parse, chunk, safe URL fetch, publish workflow [built]
+    answer/                 BM25, fusion, retrieval, writer, verifier, LangGraph flow [built]
+    storage/                SQL repository, offline dev adapters           [built]
+    bootstrap.py, cli.py    wiring and command line                        [built]
+    api/                    FastAPI routes, auth, rate limits, streaming   [planned]
+    llm/                    OpenAI, Pinecone and cross-encoder adapters    [planned]
+    evaluation/             RAGAS and DeepEval runners, thresholds         [planned]
   evals/                    golden sets, thresholds, baselines
   infrastructure/           docker, terraform
   .github/workflows/        CI, PR evaluation, nightly evaluation, deploy

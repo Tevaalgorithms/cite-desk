@@ -35,6 +35,15 @@ Status key: **Accepted** (decided), **Proposed** (recommended, needs confirmatio
 ## ADR-011 — Corpus licensing gate
 **Accepted.** No document is ingested until its license and terms URL are recorded and an admin marks it publishable. Restricted sources cannot be published.
 
+## ADR-012 — Offline stand-ins until the real adapters exist
+**Accepted.** The first implementation uses a hashing embedder, an in-memory vector index, a word-overlap reranker and an extractive answer writer so everything runs and tests offline. They are labelled as stand-ins in code. Retrieval and answer quality must not be judged until the Pinecone index, a real embedding model, a cross-encoder and an LLM writer replace them. The relevance threshold (`min_relevance`) is tuned to the overlap reranker and must be recalibrated with the cross-encoder.
+
+## ADR-013 — One SQL repository for SQLite and Postgres
+**Accepted.** SQLAlchemy serves SQLite for local work and tests, and Postgres (a free-tier managed instance is the intended first deployment) through the connection URL. Table creation at startup stands in for migrations, which are a later ticket. Pinecone remains a rebuildable copy, not the system of record.
+
+## ADR-014 — Verification checks faithfulness, not relevance
+**Accepted.** The citation verifier proves every sentence is supported by the passage it cites. It cannot tell whether the cited passage answers the question, so relevance is enforced separately (reranker score threshold, and the writer using only passages close to the best match). A test caught an unrelated passage passing verification; it is now a regression test.
+
 ## Open questions
 
 1. Which corpus (see dataset feasibility) and under what attribution?

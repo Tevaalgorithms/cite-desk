@@ -13,6 +13,10 @@ Phases run in order and each ends at a gate that must pass before the next start
 | 6 — Agent trial | Bounded agent for multi-part questions; compare against hybrid on the multi-step set | Kept only if a metric improves; otherwise disabled and documented |
 | 7 — Hardening | Security review, license review, runbook, backup and restore test, load test | Reviews signed off; restore tested |
 
+## Status
+
+Implemented offline on the stand-ins (ADR-012): the domain models and interfaces, SQL repository, parsing, chunking, safe URL fetching, the publish and unpublish workflow with license gate and audit log, BM25, fusion, hybrid retrieval, the citation verifier, the LangGraph answer flow with retry and refusal, and a CLI. Covers parts of Phases 1 to 3. Still to do: Pinecone, OpenAI and cross-encoder adapters, the golden set and retrieval metrics (Phase 2 gate), API and auth, web app, evaluation in CI, migrations.
+
 ## Definition of done (per ticket)
 
 - Tests written and passing: unit tests offline with mocked providers, integration tests against local services.
