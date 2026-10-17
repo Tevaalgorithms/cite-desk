@@ -1,0 +1,12 @@
+{
+  "id": "hb-0001",
+  "category": "multi_step",
+  "question": "I am leaving next month and have a company laptop. What do I need to do?",
+  "gold_passage_ids": ["doc-offboarding#equipment-return", "doc-benefits#end-of-employment"],
+  "reference_answer": "Placeholder: write from the corpus once chosen. Each sentence cites the gold passages.",
+  "answerable": true,
+  "expected_behavior": "answer_with_citations",
+  "tags": ["offboarding", "equipment"],
+  "reviewed_by": null,
+  "notes": "Example shape only. Not a real handbook question."
+}

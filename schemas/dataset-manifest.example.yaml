@@ -1,0 +1,14 @@
+# Source registry example. Example shape only; no real source is registered yet.
+sources:
+  - id: example-handbook
+    name: Example company handbook
+    publisher: Example Org
+    url: https://example.com/handbook
+    license: unknown            # must be recorded before publishing
+    terms_url: null
+    attribution: null
+    restricted: true            # restricted sources cannot be published
+    refresh_schedule: weekly
+    status: pending             # pending | verified | blocked
+    verified_on: null
+    notes: Replace with a real source only after its terms are verified.
