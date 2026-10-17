@@ -10,13 +10,32 @@ import sys
 from pathlib import Path
 
 from citedesk.bootstrap import build_app
-from citedesk.ingestion.parsing import ContentType
+from citedesk.ingestion.parsing import ContentType, ParseError
+from citedesk.ingestion.service import (
+    DocumentNotFoundError,
+    DuplicateDocumentError,
+    PublishBlockedError,
+)
 
 _ACTOR = "cli"
 _CONTENT_TYPES: dict[str, ContentType] = {".md": "markdown", ".html": "html", ".htm": "html"}
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one command. Expected problems print a short message and return 1."""
+    try:
+        return _run(argv)
+    except (
+        DuplicateDocumentError,
+        PublishBlockedError,
+        ParseError,
+        DocumentNotFoundError,
+    ) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+
+
+def _run(argv: list[str] | None) -> int:
     parser = argparse.ArgumentParser(prog="citedesk")
     commands = parser.add_subparsers(dest="command", required=True)
 

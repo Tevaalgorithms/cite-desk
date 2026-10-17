@@ -32,20 +32,116 @@ The first release includes a head-to-head against a plain chatbot (see the evalu
 
 ## Run it locally
 
-Needs [`uv`](https://docs.astral.sh/uv/). No API keys are required: the core runs on offline stand-ins.
+No API keys, Docker or cloud account are needed: the core runs on offline stand-ins and a local SQLite file.
+
+### 1. Install the prerequisites
+
+- **Git** and **[`uv`](https://docs.astral.sh/uv/getting-started/installation/)** (it installs the right Python, 3.12, for you).
+- **`make`** is optional; it only wraps the commands in step 4.
+
+### 2. Get the code
+
+```bash
+git clone https://github.com/Tevaalgorithms/cite-desk.git
+cd cite-desk
+```
+
+### 3. Install dependencies
 
 ```bash
 uv sync
-make check                       # ruff, strict mypy, pytest
-
-# try it end to end with any markdown file (SQLite database in the current folder)
-uv run citedesk add handbook.md --title "My handbook" --license "CC0" --publish
-uv run citedesk ask "How many vacation days do I get?"
-uv run citedesk list
 ```
 
-Publishing requires a recorded license. The offline stand-ins match on shared words only, so quality
-testing waits for the real embedding model and cross-encoder (see [`docs/implementation/roadmap.md`](docs/implementation/roadmap.md)).
+### 4. Check that everything works
+
+```bash
+make check        # or: uv run ruff check . && uv run mypy && uv run pytest
+```
+
+You should see Ruff pass, mypy report no issues, and all tests pass.
+
+### 5. Create a small sample handbook
+
+Any markdown file works. This one is made-up demo text:
+
+```bash
+cat > sample-handbook.md <<'EOF'
+# Acme Handbook (demo text)
+
+## Time off
+
+### Vacation
+
+Full-time employees receive 20 days of paid vacation each year. Unused vacation days carry over for up to 5 days into the next year.
+
+## Equipment
+
+### Returning equipment
+
+When you leave the company you must return your laptop within 5 business days. Contact IT to arrange a courier.
+EOF
+```
+
+### 6. Add it, review it, publish it
+
+```bash
+uv run citedesk add sample-handbook.md --title "Acme Handbook" --license "demo text"
+```
+
+This saves the file as a **draft**, so nobody can search it yet, and prints its id, for example `Added e94cbc1cfce6 (2 chunks, draft)`. Publishing requires a recorded `--license`; without one it is refused.
+
+```bash
+uv run citedesk list                      # shows each document with its status
+uv run citedesk publish <document-id>     # use the id printed above
+```
+
+To add and publish in one command, put `--publish` on the `add` line.
+
+### 7. Ask questions
+
+```bash
+uv run citedesk ask "How many vacation days do I get?"
+uv run citedesk ask "When do I need to give back my laptop?"
+uv run citedesk ask "What is the capital of France?"
+```
+
+The first two answer in the handbook's own words, with `[1]` markers and the section each came from. The third is not in the handbook, so CiteDesk says it can't answer.
+
+### 8. Take a document down
+
+```bash
+uv run citedesk unpublish <document-id>
+uv run citedesk ask "How many vacation days do I get?"   # now refused
+```
+
+### 9. Try your own document
+
+```bash
+uv run citedesk add path/to/your-file.md --title "My document" --license "<its license>" --publish
+```
+
+Markdown (`.md`), HTML (`.html`) and plain text files are supported. PDF, DOCX and web-page import from the command line are not available yet. The importer exists in code and is tested, but has no command.
+
+### Where things are stored
+
+- Documents, chunks and the audit log are in a SQLite file, `citedesk.local.db`, created in the folder you run the command from. It is git-ignored.
+- To start fresh, delete that file. To use another location: `export CITEDESK_DATABASE_URL="sqlite:////full/path/to/file.db"`.
+- The vector index is rebuilt in memory every time a command starts.
+
+### Good to know
+
+- The offline stand-ins match on shared words only, so a question phrased with different words than the handbook may be refused. This is expected until the real embedding model and reranker are added.
+- There is no web chat, API or admin screen yet. See the roadmap.
+
+### Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `uv: command not found` | Install uv (step 1), then open a new terminal |
+| `Record the document's license before publishing` | Re-add the file with `--license "..."` |
+| `Same content already added as document ...` | That file is already stored; use `list` to find its id |
+| `Only N characters of text found` | The file has too little text (error pages and empty files are rejected on purpose) |
+| An answer says it cannot answer | Check the document is published (`list`) and use words close to the handbook's |
 
 ## What CiteDesk will do
 
