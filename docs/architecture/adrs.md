@@ -44,9 +44,12 @@ Status key: **Accepted** (decided), **Proposed** (recommended, needs confirmatio
 ## ADR-014 — Verification checks faithfulness, not relevance
 **Accepted.** The citation verifier proves every sentence is supported by the passage it cites. It cannot tell whether the cited passage answers the question, so relevance is enforced separately (reranker score threshold, and the writer using only passages close to the best match). A test caught an unrelated passage passing verification; it is now a regression test.
 
+## ADR-015 — MVP hosting on a single Lightsail instance
+**Accepted.** The MVP runs on one Amazon Lightsail instance with Docker Compose, chosen for low, flat cost and minimal operations (starting plan $12 per month for 2 GB RAM, from AWS's pricing page read on 2026-10-17). Consequences: a single point of failure and downtime during deploys, accepted for the MVP. Secrets use a root-only environment file written by the deploy job, because Lightsail instance identity for SSM is unconfirmed. The database is an external free-tier Postgres, a Lightsail managed database ($15 per month and engine to be confirmed), or SQLite for a first single-instance deployment; the choice is still open. Move to ECS when more than one instance, zero-downtime deploys or role-based secrets are needed. Supersedes the "Hosting target" open question.
+
 ## Open questions
 
 1. Which corpus (see dataset feasibility) and under what attribution?
 2. Who reviews the golden questions?
 3. OpenAI only, or also Claude behind the same interface?
-4. Hosting target and evaluation budget cap.
+4. Which Postgres (free-tier provider, Lightsail managed database, or SQLite first), and the evaluation budget cap.

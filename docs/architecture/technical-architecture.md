@@ -84,7 +84,7 @@ Lesson carried over from an earlier project: never reuse a LangGraph checkpoint 
 - Web import blocks private, loopback and metadata addresses, limits redirects, size and content types, and honours robots.txt.
 - Uploaded files are validated by type and size, stored privately and parsed in a sandboxed worker.
 - Retrieved text is untrusted: tools are chosen by code, never by document text. Prompt-injection documents are part of the evaluation set.
-- Secrets live in a secrets manager; gitleaks and dependency audits run on every pull request.
+- Secrets are read from environment variables and never stored in git or images. For the Lightsail MVP they come from a root-only environment file written at deploy time (see `deployment.md`); gitleaks and dependency audits run on every pull request.
 
 ## Observability
 

@@ -7,7 +7,7 @@ Report suspected vulnerabilities privately through GitHub's **Security → Repor
 ## Secrets
 
 - Never commit API keys, tokens, passwords, private keys, `.env` files, Terraform state, or cloud credentials.
-- Use `.env.example` with placeholders only; keep real values in a secrets manager for deployed environments.
+- Use `.env.example` with placeholders only; for deployed environments keep real values in the protected environment file or secrets store described in `docs/architecture/deployment.md`.
 - If a secret is committed by mistake, revoke and rotate it immediately — removing it from git history is not sufficient.
 
 ## Content

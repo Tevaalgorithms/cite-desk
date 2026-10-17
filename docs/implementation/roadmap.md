@@ -11,7 +11,7 @@ Phases run in order and each ends at a gate that must pass before the next start
 | 4 — Product | Streaming chat, source drawer, admin console (upload, import, preview, publish, rollback), audit log | Playwright flows pass for chat and admin |
 | 5 — Evaluation in CI | RAGAS and DeepEval jobs, thresholds, PR comment, nightly run, LangSmith experiments | Gates enforced on `main`; baseline stored |
 | 6 — Agent trial | Bounded agent for multi-part questions; compare against hybrid on the multi-step set | Kept only if a metric improves; otherwise disabled and documented |
-| 7 — Hardening | Security review, license review, runbook, backup and restore test, load test | Reviews signed off; restore tested |
+| 7 — Hardening | Security review, license review, runbook, backup and restore test, load test, measure memory and latency and size the Lightsail instance | Reviews signed off; restore tested |
 
 ## Status
 
