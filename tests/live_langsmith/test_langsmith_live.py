@@ -1,6 +1,6 @@
 """Tests against the real LangSmith service, in a throwaway project that is deleted afterwards.
 
-    CITEDESK_RUN_LANGSMITH_TESTS=1 uv run pytest tests/langsmith --no-cov
+    CITEDESK_RUN_LANGSMITH_TESTS=1 uv run pytest tests/live_langsmith --no-cov
 
 They use the real OpenAI model too (a few cents), so the model call appears inside the trace.
 """
@@ -14,12 +14,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from langsmith import Client
 from pydantic import SecretStr
 
 from citedesk.bootstrap import App, build_app
 from citedesk.config import Settings
 from citedesk.ops.ssm import read_env_file
-from langsmith import Client
 
 ROOT = Path(__file__).resolve().parents[2]
 _ENV = read_env_file(ROOT / ".env") if (ROOT / ".env").exists() else {}

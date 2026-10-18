@@ -182,8 +182,9 @@ def build_index(settings: Settings, embedder: Embedder) -> VectorIndex:
                 "CITEDESK_VECTOR_INDEX=pinecone needs CITEDESK_PINECONE_API_KEY to be set."
             )
         # Imported here so the in-memory index works without touching the Pinecone SDK.
-        from citedesk.adapters.pinecone_index import PineconeVectorIndex, ensure_index
         from pinecone import Pinecone
+
+        from citedesk.adapters.pinecone_index import PineconeVectorIndex, ensure_index
 
         client = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
         host = ensure_index(

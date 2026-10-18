@@ -145,7 +145,7 @@ CITEDESK_MODELS=local CITEDESK_VECTOR_INDEX=pinecone uv run --extra models cited
 CITEDESK_MODELS=local CITEDESK_VECTOR_INDEX=pinecone uv run --extra models citedesk pinecone status
 ```
 
-Put `CITEDESK_VECTOR_INDEX=pinecone` in `.env` to use it for everything. The database stays the source of truth: at start the index is repaired to match it, and `citedesk pinecone sync` does the same on demand. Each environment uses its own namespace (`CITEDESK_ENVIRONMENT`, default `dev`), so development and production never see each other's vectors. Test against the real index with `CITEDESK_RUN_PINECONE_TESTS=1 uv run --extra models pytest tests/pinecone --no-cov`.
+Put `CITEDESK_VECTOR_INDEX=pinecone` in `.env` to use it for everything. The database stays the source of truth: at start the index is repaired to match it, and `citedesk pinecone sync` does the same on demand. Each environment uses its own namespace (`CITEDESK_ENVIRONMENT`, default `dev`), so development and production never see each other's vectors. Test against the real index with `CITEDESK_RUN_PINECONE_TESTS=1 uv run --extra models pytest tests/live_pinecone --no-cov`.
 
 ### Trace answers in LangSmith (optional)
 

@@ -1,6 +1,6 @@
 """Tests against the real Pinecone index. They use a random throwaway namespace and clean it up.
 
-    CITEDESK_RUN_PINECONE_TESTS=1 uv run --extra models pytest tests/pinecone --no-cov
+    CITEDESK_RUN_PINECONE_TESTS=1 uv run --extra models pytest tests/live_pinecone --no-cov
 
 The index is created once with `uv run citedesk pinecone init`. Pinecone's free plan is generous
 but not unlimited, so these run only on request, never in CI.
@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from pinecone import Pinecone
 from pydantic import SecretStr
 
 from citedesk.adapters.pinecone_index import PineconeVectorIndex
@@ -19,7 +20,6 @@ from citedesk.bootstrap import App, build_app, build_models
 from citedesk.config import Settings
 from citedesk.indexing import sync_vector_index
 from citedesk.ops.ssm import read_env_file
-from pinecone import Pinecone
 
 ROOT = Path(__file__).resolve().parents[2]
 _ENV = read_env_file(ROOT / ".env") if (ROOT / ".env").exists() else {}

@@ -69,6 +69,6 @@ markers = [
     "models: needs the local ONNX models (uv sync --extra models)",
     "integration: needs a running Postgres (see tests/integration)",
     "llm: calls the real OpenAI model, costs a few cents (see tests/llm)",
-    "pinecone: uses the real Pinecone index in a throwaway namespace (see tests/pinecone)",
-    "live_traces: sends traces to the real LangSmith in a throwaway project (see tests/langsmith)",
+    "pinecone: uses the real Pinecone index in a throwaway namespace (see tests/live_pinecone)",
+    "live_traces: sends traces to the real LangSmith in a throwaway project (see tests/live_langsmith)",
 ]
