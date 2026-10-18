@@ -1,6 +1,7 @@
 "use client";
 
 import type { DocumentInfo } from "@/lib/types";
+import { LicenseCell } from "./LicenseCell";
 
 interface Props {
   documents: DocumentInfo[];
@@ -8,9 +9,17 @@ interface Props {
   onPreview: (document: DocumentInfo) => void;
   onPublish: (document: DocumentInfo) => void;
   onUnpublish: (document: DocumentInfo) => void;
+  onSaveLicense: (document: DocumentInfo, license: string) => Promise<boolean>;
 }
 
-export function DocumentTable({ documents, busyId, onPreview, onPublish, onUnpublish }: Props) {
+export function DocumentTable({
+  documents,
+  busyId,
+  onPreview,
+  onPublish,
+  onUnpublish,
+  onSaveLicense,
+}: Props) {
   if (documents.length === 0) {
     return <p className="muted">No documents yet. Add one below.</p>;
   }
@@ -31,7 +40,9 @@ export function DocumentTable({ documents, busyId, onPreview, onPublish, onUnpub
             <tr key={document.id}>
               <td>{document.title}</td>
               <td>{document.source_name}</td>
-              <td>{document.license ?? <span className="warn">missing</span>}</td>
+              <td>
+                <LicenseCell document={document} onSave={onSaveLicense} />
+              </td>
               <td>
                 <span className={`status ${document.status}`}>{document.status}</span>
               </td>

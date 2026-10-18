@@ -288,3 +288,40 @@ def test_token_command_needs_a_secret(
     monkeypatch.chdir("/")  # so no .env file is read
     assert main(["token", "--user", "alice"]) == 1
     assert "CITEDESK_JWT_DEV_SECRET" in capsys.readouterr().err
+
+
+def test_an_admin_can_add_a_license_to_a_draft_and_then_publish_it(client: TestClient) -> None:
+    admin = _headers("admin")
+    document_id = _add(client, license=None)
+    assert (
+        client.post(f"/v1/admin/documents/{document_id}/publish", headers=admin).status_code == 409
+    )
+
+    response = client.post(
+        f"/v1/admin/documents/{document_id}/license", headers=admin, json={"license": "CC0 (test)"}
+    )
+    assert response.status_code == 200
+    assert response.json()["license"] == "CC0 (test)"
+    assert (
+        client.post(f"/v1/admin/documents/{document_id}/publish", headers=admin).status_code == 200
+    )
+
+    audit = [entry["action"] for entry in client.get("/v1/admin/audit", headers=admin).json()]
+    assert audit[:3] == ["published", "license", "add"]
+
+
+def test_license_endpoint_rejects_blank_unknown_and_unauthorised_requests(
+    client: TestClient,
+) -> None:
+    document_id = _add(client, license=None)
+    url = f"/v1/admin/documents/{document_id}/license"
+    assert client.post(url, headers=_headers("admin"), json={"license": ""}).status_code == 422
+    assert client.post(url, headers=_headers("admin"), json={"license": "   "}).status_code == 422
+    assert (
+        client.post(
+            "/v1/admin/documents/nope/license", headers=_headers("admin"), json={"license": "x"}
+        ).status_code
+        == 404
+    )
+    assert client.post(url, headers=_headers("analyst"), json={"license": "x"}).status_code == 403
+    assert client.post(url, json={"license": "x"}).status_code == 401

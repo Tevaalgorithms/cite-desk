@@ -62,6 +62,12 @@ export const importUrl = (
   body: { url: string; source_name: string; license: string | null },
 ) => request<DocumentInfo>(token, "/v1/admin/imports", { method: "POST", body });
 
+export const setLicense = (token: string, id: string, license: string) =>
+  request<DocumentInfo>(token, `/v1/admin/documents/${id}/license`, {
+    method: "POST",
+    body: { license },
+  });
+
 export const previewDocument = (token: string, id: string) =>
   request<ChunkInfo[]>(token, `/v1/admin/documents/${id}/preview`);
 

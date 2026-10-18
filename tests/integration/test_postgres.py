@@ -103,3 +103,10 @@ def test_chunks_keep_their_order_and_text_on_postgres(pg_app: App) -> None:
     chunks = pg_app.repository.get_chunks(document.id)
     assert [c.ordinal for c in chunks] == list(range(len(chunks)))
     assert any(c.section_path == "Time off > Vacation" and "20 days" in c.text for c in chunks)
+
+
+def test_license_update_and_audit_on_postgres(pg_app: App) -> None:
+    document = _add(pg_app, license=None)
+    pg_app.ingestion.set_license(document.id, "CC0", actor="alice")
+    assert pg_app.repository.get_document(document.id).license == "CC0"  # type: ignore[union-attr]
+    assert pg_app.repository.audit_actions(document.id) == ["add", "license"]

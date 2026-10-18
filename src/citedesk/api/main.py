@@ -21,6 +21,7 @@ from citedesk.ingestion.parsing import ParseError
 from citedesk.ingestion.service import (
     DocumentNotFoundError,
     DuplicateDocumentError,
+    InvalidDocumentError,
     PublishBlockedError,
 )
 
@@ -32,6 +33,7 @@ _ERROR_STATUS: list[tuple[type[Exception], int]] = [
     (DuplicateDocumentError, status.HTTP_409_CONFLICT),
     (PublishBlockedError, status.HTTP_409_CONFLICT),
     (ParseError, status.HTTP_422_UNPROCESSABLE_CONTENT),
+    (InvalidDocumentError, status.HTTP_422_UNPROCESSABLE_CONTENT),
     (UnsafeUrlError, status.HTTP_400_BAD_REQUEST),
     (FetchError, status.HTTP_502_BAD_GATEWAY),
 ]

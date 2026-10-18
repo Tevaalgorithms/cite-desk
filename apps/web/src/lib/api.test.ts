@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, ask, publishDocument } from "./api";
+import { ApiError, ask, publishDocument, setLicense } from "./api";
 import { errorText, refusalText } from "./messages";
 
 function mockFetch(response: Response | Error) {
@@ -30,6 +30,15 @@ describe("api", () => {
       status: 409,
       message: "Record the document's license",
     });
+  });
+
+  it("sends the license to the document's license endpoint", async () => {
+    const fetchMock = mockFetch(Response.json({ id: "abc", license: "CC0" }));
+    await setLicense("tok", "abc", "CC0");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/v1\/admin\/documents\/abc\/license$/);
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ license: "CC0" }));
   });
 
   it("reports an unreachable server", async () => {

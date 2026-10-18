@@ -17,12 +17,17 @@ from citedesk.ingestion.parsing import ContentType, parse
 
 class DuplicateDocumentError(ValueError):
     def __init__(self, existing: Document) -> None:
-        super().__init__(f"Same content already added as document {existing.id}")
+        title, status = existing.title, existing.status.value
+        super().__init__(f"This content was already added as \u201c{title}\u201d ({status}).")
         self.existing = existing
 
 
 class PublishBlockedError(ValueError):
     """The document may not be published yet, for example because its license is unknown."""
+
+
+class InvalidDocumentError(ValueError):
+    """A value the admin supplied cannot be used, for example an empty license."""
 
 
 class DocumentNotFoundError(KeyError):
@@ -121,6 +126,23 @@ class IngestionService:
             terms_url=terms_url,
             source_url=page.url,
         )
+
+    def set_license(
+        self, document_id: str, license: str, *, actor: str, terms_url: str | None = None
+    ) -> Document:
+        """Record or correct a document's license, so a draft added without one can be published."""
+        cleaned = license.strip()
+        if not cleaned:
+            raise InvalidDocumentError("The license cannot be empty.")
+        self._require(document_id)
+        self._repository.update_license(
+            document_id,
+            license=cleaned,
+            terms_url=terms_url.strip() if terms_url and terms_url.strip() else None,
+            actor=actor,
+            when=datetime.now(UTC),
+        )
+        return self._require(document_id)
 
     def preview(self, document_id: str) -> list[Chunk]:
         """The chunks an admin reviews before publishing."""

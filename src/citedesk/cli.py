@@ -20,12 +20,19 @@ from citedesk.ingestion.parsing import ContentType, ParseError
 from citedesk.ingestion.service import (
     DocumentNotFoundError,
     DuplicateDocumentError,
+    InvalidDocumentError,
     PublishBlockedError,
 )
 
 _ACTOR = "cli"
 _CONTENT_TYPES: dict[str, ContentType] = {".md": "markdown", ".html": "html", ".htm": "html"}
-_EXPECTED_ERRORS = (DuplicateDocumentError, PublishBlockedError, ParseError, DocumentNotFoundError)
+_EXPECTED_ERRORS = (
+    DuplicateDocumentError,
+    PublishBlockedError,
+    ParseError,
+    DocumentNotFoundError,
+    InvalidDocumentError,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,6 +76,12 @@ def _publish(app: App, args: argparse.Namespace) -> int:
     return 0
 
 
+def _license(app: App, args: argparse.Namespace) -> int:
+    app.ingestion.set_license(args.document_id, args.license, actor=_ACTOR)
+    print("License recorded")
+    return 0
+
+
 def _unpublish(app: App, args: argparse.Namespace) -> int:
     app.ingestion.unpublish(args.document_id, actor=_ACTOR)
     print("Unpublished")
@@ -96,6 +109,7 @@ _COMMANDS = {
     "add": _add,
     "publish": _publish,
     "unpublish": _unpublish,
+    "license": _license,
     "list": _list,
     "ask": _ask,
 }
@@ -161,6 +175,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     publish = commands.add_parser("publish", help="publish a draft document")
     publish.add_argument("document_id")
+
+    license_ = commands.add_parser("license", help="record or correct a document's license")
+    license_.add_argument("document_id")
+    license_.add_argument("license")
 
     unpublish = commands.add_parser("unpublish", help="take a document out of search")
     unpublish.add_argument("document_id")

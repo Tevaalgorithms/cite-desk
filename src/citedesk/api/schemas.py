@@ -18,6 +18,11 @@ class AddDocumentRequest(BaseModel):
     terms_url: str | None = Field(default=None, max_length=2000)
 
 
+class SetLicenseRequest(BaseModel):
+    license: str = Field(min_length=1, max_length=300)
+    terms_url: str | None = Field(default=None, max_length=2000)
+
+
 class ImportUrlRequest(BaseModel):
     url: str = Field(min_length=1, max_length=2000)
     source_name: str = Field(min_length=1, max_length=300)

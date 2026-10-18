@@ -71,6 +71,12 @@ class DocumentRepository(Protocol):
 
     def list_documents(self) -> list[Document]: ...
 
+    def update_license(
+        self, document_id: str, *, license: str, terms_url: str | None, actor: str, when: datetime
+    ) -> None:
+        """Record the license and terms of a document, with an audit entry. Search is unaffected."""
+        ...
+
     def transition(
         self, document_id: str, status: DocumentStatus, *, actor: str, when: datetime
     ) -> None:

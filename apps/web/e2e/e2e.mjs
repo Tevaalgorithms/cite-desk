@@ -168,26 +168,23 @@ await step("B7", "preview shows chunks with their sections", async () => {
   await page.getByText("Time off > Vacation").first().waitFor({ timeout: 5000 });
   await page.getByRole("button", { name: "Close preview" }).click();
 });
-await step("B8", "admin adds the same file with a license, then publishes", async () => {
-  // The first copy has no license; add another copy with a different title and a license.
-  // Content is identical, so the duplicate check must refuse it.
+await step("B8", "adding the same file again is refused and names the existing document", async () => {
   await page.getByLabel("File (optional)").setInputFiles(handbook);
-  await page.getByLabel("Title", { exact: true }).fill("Acme Handbook (licensed)");
   await page.getByLabel("Source", { exact: true }).first().fill("sample data");
-  await page.getByLabel("License", { exact: true }).first().fill("CC0 (synthetic sample)");
   await page.getByRole("button", { name: "Add as draft" }).click();
-  await page.getByRole("alert").filter({ hasText: "already added" }).waitFor({ timeout: 8000 });
+  await page.getByRole("alert").filter({ hasText: "already added as \u201cacme-handbook\u201d (draft)" }).waitFor({ timeout: 8000 });
 });
-await step("B9", "admin can fix the license by re-adding after paste with a tiny edit, then publish", async () => {
-  const text = (await import("node:fs")).readFileSync(handbook, "utf8") + "\n\n## Notes\n\nThis copy has a recorded license.\n";
-  await page.getByLabel("File (optional)").setInputFiles({ name: "acme-licensed.md", mimeType: "text/markdown", buffer: Buffer.from(text) });
-  await page.getByLabel("Title", { exact: true }).fill("Acme Handbook (licensed)");
-  await page.getByLabel("Source", { exact: true }).first().fill("sample data");
-  await page.getByLabel("License", { exact: true }).first().fill("CC0 (synthetic sample)");
-  await page.getByRole("button", { name: "Add as draft" }).click();
-  await page.getByText("Added “Acme Handbook (licensed)”").waitFor({ timeout: 8000 });
-  await page.locator("tr", { hasText: "Acme Handbook (licensed)" }).getByRole("button", { name: "Publish" }).click();
-  await page.locator("tr", { hasText: "Acme Handbook (licensed)" }).getByText("published").waitFor({ timeout: 8000 });
+await step("B9", "the missing license is added in the table, then publishing works", async () => {
+  const row = page.locator("tr", { hasText: "acme-handbook" });
+  await row.getByRole("button", { name: "Add license" }).click();
+  await row.getByLabel("License for acme-handbook").fill("   ");
+  expect(await row.getByRole("button", { name: "Save" }).isDisabled(), "Save should be disabled for a blank license");
+  await row.getByLabel("License for acme-handbook").fill("CC0 (synthetic sample)");
+  await row.getByRole("button", { name: "Save" }).click();
+  await row.getByText("CC0 (synthetic sample)").waitFor({ timeout: 8000 });
+  await page.screenshot({ path: `${shots}/06-license-added.png` });
+  await row.getByRole("button", { name: "Publish" }).click();
+  await row.getByText("published").waitFor({ timeout: 8000 });
   await page.screenshot({ path: `${shots}/06-admin-published.png`, fullPage: true });
 });
 await step("B10", "audit log records the admin's actions", async () => {
@@ -230,8 +227,8 @@ await step("B14", "signing out clears the session", async () => {
 // ----------------------------------------------------------------------------- unpublish, layout
 await step("B15", "unpublishing removes the content from answers", async () => {
   await signIn("admin", "/admin");
-  await page.locator("tr", { hasText: "Acme Handbook (licensed)" }).getByRole("button", { name: "Unpublish" }).click();
-  await page.locator("tr", { hasText: "Acme Handbook (licensed)" }).getByText("retired").waitFor({ timeout: 8000 });
+  await page.locator("tr", { hasText: "acme-handbook" }).getByRole("button", { name: "Unpublish" }).click();
+  await page.locator("tr", { hasText: "acme-handbook" }).getByText("retired").waitFor({ timeout: 8000 });
   await signOut();
   await signIn("analyst");
   await ask("How many vacation days do I get?");

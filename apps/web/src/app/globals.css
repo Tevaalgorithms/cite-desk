@@ -159,3 +159,9 @@ tr:last-child td { border-bottom: 0; }
   .topbar { gap: 0.6rem; }
   .bubble { max-width: 100%; }
 }
+
+/* Inline license editor */
+.license { display: flex; align-items: baseline; gap: 0.3rem; flex-wrap: wrap; }
+.license-edit { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 16rem; }
+.license-edit input { margin: 0; flex: 1 1 10rem; padding: 0.35rem 0.6rem; }
+button.small-button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }

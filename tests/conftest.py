@@ -1,5 +1,6 @@
 """Shared test fixtures. The sample handbook below is synthetic text written for tests."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,15 @@ SECOND_DOCUMENT = """\
 Passwords must be at least 14 characters long. Multi-factor authentication is required for \
 every administrator account.
 """
+
+
+@pytest.fixture(autouse=True)
+def _isolate_from_local_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests must behave the same on every machine: ignore any local `.env` file and any
+    CITEDESK_* variables set in the developer's shell (for example CITEDESK_MODELS=local)."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for name in [key for key in os.environ if key.startswith("CITEDESK_")]:
+        monkeypatch.delenv(name)
 
 
 @pytest.fixture

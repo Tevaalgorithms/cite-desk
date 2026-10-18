@@ -6,6 +6,7 @@ import {
   listDocuments,
   previewDocument,
   publishDocument,
+  setLicense,
   unpublishDocument,
 } from "@/lib/api";
 import { errorText } from "@/lib/messages";
@@ -59,6 +60,19 @@ export function AdminConsole({ token }: { token: string }) {
     }
   };
 
+  /** Returns true when the license was saved, so the editor can close. */
+  const saveLicense = async (document: DocumentInfo, license: string): Promise<boolean> => {
+    setActionError(null);
+    try {
+      await setLicense(token, document.id, license);
+      refresh();
+      return true;
+    } catch (failure) {
+      setActionError(errorText(failure));
+      return false;
+    }
+  };
+
   const showPreview = async (document: DocumentInfo) => {
     try {
       setPreview({ title: document.title, chunks: await previewDocument(token, document.id) });
@@ -85,6 +99,7 @@ export function AdminConsole({ token }: { token: string }) {
         onPreview={(document) => void showPreview(document)}
         onPublish={(document) => void change(document, publishDocument)}
         onUnpublish={(document) => void change(document, unpublishDocument)}
+        onSaveLicense={saveLicense}
       />
 
       {preview && (

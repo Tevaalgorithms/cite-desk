@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from citedesk.api.auth import Principal, require_roles
 from citedesk.api.ratelimit import enforce
-from citedesk.api.schemas import AddDocumentRequest, ChatRequest, ImportUrlRequest
+from citedesk.api.schemas import (
+    AddDocumentRequest,
+    ChatRequest,
+    ImportUrlRequest,
+    SetLicenseRequest,
+)
 from citedesk.bootstrap import App
 from citedesk.domain.models import Answer, AuditEntry, Chunk, Document, Passage
 
@@ -86,6 +91,17 @@ def import_url(body: ImportUrlRequest, request: Request, principal: Admin) -> Do
         actor=principal.user_id,
         license=body.license,
         terms_url=body.terms_url,
+    )
+
+
+@router.post("/v1/admin/documents/{document_id}/license")
+def set_license(
+    document_id: str, body: SetLicenseRequest, request: Request, principal: Admin
+) -> Document:
+    """Record or correct a document's license (for example on a draft added without one)."""
+    enforce(request, principal)
+    return _app(request).ingestion.set_license(
+        document_id, body.license, actor=principal.user_id, terms_url=body.terms_url
     )
 
 

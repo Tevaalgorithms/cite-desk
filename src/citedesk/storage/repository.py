@@ -165,6 +165,17 @@ class SqlRepository:
             rows = session.scalars(select(_DocumentRow).order_by(_DocumentRow.created_at))
             return [_to_document(row) for row in rows]
 
+    def update_license(
+        self, document_id: str, *, license: str, terms_url: str | None, actor: str, when: datetime
+    ) -> None:
+        with self._sessions.begin() as session:
+            row = session.get(_DocumentRow, document_id)
+            if row is None:
+                raise KeyError(document_id)
+            row.license = license
+            row.terms_url = terms_url
+            self._write_audit(session, when, actor, "license", document_id)
+
     def transition(
         self, document_id: str, status: DocumentStatus, *, actor: str, when: datetime
     ) -> None:
