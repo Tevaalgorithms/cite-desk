@@ -1,5 +1,6 @@
 """Application settings, read from environment variables prefixed with CITEDESK_."""
 
+import os
 from typing import Literal
 
 from pydantic import SecretStr
@@ -19,7 +20,14 @@ LOCAL_MIN_RELEVANCE = -10.0
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CITEDESK_", env_file=".env", extra="ignore")
+    # Settings come from CITEDESK_* environment variables first, then from the file named by
+    # CITEDESK_ENV_FILE (default ".env"). Set CITEDESK_ENV_FILE=/dev/null to ignore every file,
+    # which is what throwaway test servers do so they can never pick up real keys or services.
+    model_config = SettingsConfigDict(
+        env_prefix="CITEDESK_",
+        env_file=os.environ.get("CITEDESK_ENV_FILE", ".env"),
+        extra="ignore",
+    )
 
     # SQLite works out of the box; use a Postgres URL such as
     # postgresql+psycopg://user:password@host/db when deploying.

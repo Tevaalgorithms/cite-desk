@@ -2,7 +2,7 @@
 
 CiteDesk is a company-handbook assistant: employees ask questions in plain language and get answers where **every sentence cites the exact handbook passage it came from**. If the handbook does not support an answer, CiteDesk says so instead of guessing.
 
-**Status:** backend core implemented and tested (ingestion, hybrid retrieval, citation verifier, LangGraph answer flow, CLI, retrieval and answer evaluation with quality gates). Runs on offline stand-ins by default or on real local embedding and cross-encoder models. Also a FastAPI layer with signed-in roles and rate limits. Also a Next.js web app: chat with citation chips and a source drawer, and an admin console. Also an OpenAI answer writer with a status bar in the web app. Not built yet: the Pinecone index, LangSmith tracing, RAGAS and DeepEval, OIDC sign-in, streaming answers, the quality dashboard.  
+**Status:** backend core implemented and tested (ingestion, hybrid retrieval, citation verifier, LangGraph answer flow, CLI, retrieval and answer evaluation with quality gates). Runs on offline stand-ins by default or on real local embedding and cross-encoder models. Also a FastAPI layer with signed-in roles and rate limits. Also a Next.js web app: chat with citation chips and a source drawer, and an admin console. Also an OpenAI answer writer with a status bar in the web app, a Pinecone vector index, optional LangSmith tracing and an answer cache. Deliberately not built: an agent loop (measured, not needed: ADR-018) and Graph RAG. Not built yet: RAGAS and DeepEval (on hold), OIDC sign-in, streaming answers, saved conversations and feedback, the quality dashboard.  
 **Design baseline:** October 17, 2026  
 **Demo corpus:** an openly licensed company handbook, to be chosen after its reuse terms are verified (see [`docs/product/dataset-feasibility.md`](docs/product/dataset-feasibility.md)). Nothing has been downloaded or ingested.
 
@@ -135,6 +135,21 @@ CITEDESK_OPENAI_MODEL=gpt-5.4-nano       # the cheap default; gpt-5.4-mini is sl
 ```
 
 Every sentence is still checked against its source, and the app refuses rather than guesses. The top bar of the web app shows which model is answering ("Live · openai · gpt-5.4-nano") with a **Check connection** button. Measured quality and cost are in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md); a question costs a fraction of a cent. To test the real model: `CITEDESK_RUN_LLM_TESTS=1 uv run pytest tests/llm --no-cov` (a few cents).
+
+### Keep vectors in Pinecone (optional)
+
+By default vectors are kept in memory and rebuilt from the database at every start. To keep them in Pinecone instead (needs `CITEDESK_PINECONE_API_KEY` in `.env` and the real models, because the index size must match the embedding model):
+
+```bash
+CITEDESK_MODELS=local CITEDESK_VECTOR_INDEX=pinecone uv run --extra models citedesk pinecone init   # once
+CITEDESK_MODELS=local CITEDESK_VECTOR_INDEX=pinecone uv run --extra models citedesk pinecone status
+```
+
+Put `CITEDESK_VECTOR_INDEX=pinecone` in `.env` to use it for everything. The database stays the source of truth: at start the index is repaired to match it, and `citedesk pinecone sync` does the same on demand. Each environment uses its own namespace (`CITEDESK_ENVIRONMENT`, default `dev`), so development and production never see each other's vectors. Test against the real index with `CITEDESK_RUN_PINECONE_TESTS=1 uv run --extra models pytest tests/pinecone --no-cov`.
+
+### Trace answers in LangSmith (optional)
+
+Set `CITEDESK_LANGSMITH_TRACING=true` (and `CITEDESK_LANGSMITH_API_KEY`) to record each answer's steps, timings and model call in your LangSmith project. **A trace contains the question and, unless you also set `CITEDESK_LANGSMITH_HIDE_CONTENT=true`, the handbook passages, which leaves this system.** It is off by default. Repeated questions are answered from a small in-memory cache (`CITEDESK_ANSWER_CACHE_SIZE`, `0` turns it off) that is invalidated whenever documents are published or removed.
 
 ### Use the real local models (optional)
 

@@ -55,3 +55,28 @@ def test_unknown_baselines_raise_a_clear_error() -> None:
 def test_baselines_file_is_valid_json_with_both_backends() -> None:
     data = json.loads(BASELINES.read_text())
     assert {"offline", "local"} <= set(data)
+
+
+def test_an_evaluation_never_touches_real_services_even_when_the_environment_points_at_them(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A developer's .env may select Pinecone, the OpenAI writer and LangSmith. An evaluation must
+    ignore all of that: otherwise its throwaway database would 'repair' the real Pinecone index
+    by deleting every vector that is not in the throwaway database."""
+    from citedesk.adapters.openai_writer import OpenAIAnswerWriter
+    from citedesk.evaluation.runner import build_sample_app
+    from citedesk.storage.dev_adapters import InMemoryVectorIndex
+
+    monkeypatch.setenv("CITEDESK_VECTOR_INDEX", "pinecone")
+    monkeypatch.setenv("CITEDESK_PINECONE_API_KEY", "pc-must-never-be-used")
+    monkeypatch.setenv("CITEDESK_WRITER", "openai")
+    monkeypatch.setenv("CITEDESK_OPENAI_API_KEY", "sk-must-never-be-used")
+    monkeypatch.setenv("CITEDESK_LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("CITEDESK_LANGSMITH_API_KEY", "ls-must-never-be-used")
+
+    app = build_sample_app("offline", ROOT / "data" / "sample" / "acme-handbook.md", tmp_path)
+
+    assert isinstance(app.index, InMemoryVectorIndex)
+    assert not isinstance(app.model, OpenAIAnswerWriter)
+    assert not app.tracer.enabled
+    assert app.model.info().writer == "extractive"

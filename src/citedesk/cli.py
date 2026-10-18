@@ -245,7 +245,7 @@ def _eval_retrieval(args: argparse.Namespace) -> int:
     if args.openai_model:
         overrides["openai_model"] = args.openai_model
     run = run_evaluation(args.models, args.handbook, args.golden, **overrides)
-    summary = summarize(run.retrieval, run.answers)
+    summary = summarize(run.retrieval, run.answers, run.coverage)
     if args.json:
         print(json.dumps(summary, indent=2))
     else:

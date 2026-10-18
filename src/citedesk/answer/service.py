@@ -64,6 +64,10 @@ class AnswerService:
             self._cache.put(question, answer, self._cache_label)
         return answer
 
+    def passages_for(self, question: str) -> list[Passage]:
+        """The passages the writer would receive for a question (used to measure retrieval)."""
+        return self._retrieve(question, self._current_corpus())
+
     def source_passage(self, chunk_id: str) -> Passage | None:
         """The passage behind a citation, for the source drawer. Published content only."""
         return self._corpus_reader.get_passage(chunk_id)

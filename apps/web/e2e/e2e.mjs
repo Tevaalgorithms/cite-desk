@@ -35,6 +35,13 @@ const env = external
       CITEDESK_CORS_ORIGINS: JSON.stringify([WEB]),
       CITEDESK_RATE_LIMIT_PER_MINUTE: "1000",
       CITEDESK_MODELS: "offline",
+      // A developer's .env may select Pinecone, OpenAI and tracing. A throwaway test server must
+      // never touch those, so it ignores every settings file and states what it uses explicitly.
+      CITEDESK_ENV_FILE: "/dev/null",
+      CITEDESK_VECTOR_INDEX: "memory",
+      CITEDESK_WRITER: "extractive",
+      CITEDESK_LANGSMITH_TRACING: "false",
+      CITEDESK_ENVIRONMENT: "e2e",
     };
 const token = (user, role) =>
   execFileSync("uv", ["run", "citedesk", "token", "--user", user, "--role", role], { cwd: repoRoot, env }).toString().trim();

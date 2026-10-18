@@ -4,7 +4,7 @@ Every pull request is scored on retrieval, answer quality and citations, and the
 
 ## What is implemented today
 
-`citedesk eval-retrieval` (see the README) measures, without any API key:
+`citedesk eval-retrieval` (see the README) measures, without any API key (it always uses a throwaway database, an in-memory index and the built-in writer unless you pass `--writer openai`, whatever your `.env` says):
 
 - **Retrieval by stage:** keyword only, vector only, both fused, and fused + reranked. Reported as Recall@1, @3, @5 and MRR, split by question type (exact wording versus paraphrase).
 - **Answers:** whether the right section was cited, refusals of unanswerable questions, and "confidently wrong" answers (cited the wrong section, or answered an unanswerable question).
@@ -45,6 +45,15 @@ The same 51 sample questions (all three sets) were answered with the real model,
 - **Nano versus mini.** They differ on 1 of 37 answerable questions, and the difference was a safe refusal ("Are two-factor logins mandatory?", where the handbook says only administrators must use it). The MVP default is therefore the cheaper `gpt-5.4-nano`. Switch with `CITEDESK_OPENAI_MODEL=gpt-5.4-mini`; no code change.
 - **Prices.** `gpt-5.4-nano`: $0.20 per million input tokens and $1.25 per million output, from [OpenAI's model page](https://developers.openai.com/docs/models/gpt-5.4-nano). `gpt-5.4-mini`: $0.75 and $4.50, from a third-party tracker only ([source](https://pricepertoken.com/pricing-page/model/openai-gpt-5.4-mini)), unconfirmed. The per-question costs above are my arithmetic from these prices and the measured tokens. Re-check prices before budgeting.
 - **Limits of this evidence.** 37 answerable and 14 unanswerable synthetic questions, written by the same author as the handbook, on short passages (about 300 prompt tokens per call). A real handbook has longer sections, so expect more tokens per question (up to roughly 6 passages of about 300 tokens each). Real-model scores on `golden` benefit from a threshold calibrated on that set. A single run per model; results at temperature 0 can still vary a little.
+
+## Multi-part questions and the agent decision
+
+`evals/sample/multistep.json` holds 12 questions that each need two or three sections. They are scored two ways, both reported by `citedesk eval-retrieval`:
+
+- **Coverage** (deterministic, gated): did retrieval hand the writer every needed section? **12 of 12.** This is the measure that decides whether an agent could help, because an agent only improves retrieval.
+- **Answer completeness** (depends on the writer): did the answer cite every needed section? `gpt-5.4-nano` 11 of 12, `gpt-5.4-mini` 10 of 12, built-in quoting writer 0 of 12. One of nano's misses is a flawed test question, not a failure.
+
+Conclusion (ADR-018): no agent is built; what handles multi-part questions is the language model combining the passages retrieval already supplies. If coverage ever drops below complete on a larger corpus, that is the evidence to build one.
 
 ## Setting up judged evaluation: what you need to provide
 

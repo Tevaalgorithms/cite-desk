@@ -37,7 +37,8 @@ Treat the Lightsail-specific steps below as a checklist to confirm, not a verifi
    CITEDESK_SITE=handbook.example.com
    CITEDESK_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
    CITEDESK_JWT_DEV_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
-   CITEDESK_MODELS=offline
+   CITEDESK_MODELS=local
+   CITEDESK_API_EXTRAS=--extra models
    EOF2
    chmod 600 .env
    ```
@@ -73,4 +74,5 @@ To roll back, check out the previous commit or tag (`git checkout <tag>`) and ru
 - **Backups are not designed yet.** Use your database's snapshot feature. For the bundled trial Postgres, `docker compose exec postgres pg_dump -U postgres citedesk > backup.sql` works but you must copy the file off the machine yourself.
 - **Single instance:** a deploy restarts the containers, so expect a short outage. The in-memory rate limiter and the keyword index are per container; this is why the MVP runs one API container.
 - **Vector search** currently uses an in-memory index rebuilt at startup, so published documents are re-embedded on every restart. Fine for a small handbook; the Pinecone adapter is planned.
-- **Local models:** to bake in the embedding model and cross-encoder, build the API image with `--build-arg EXTRAS="--extra models"` and set `CITEDESK_MODELS=local`. Check memory use on the instance first.
+- **Local models:** the production settings use them (`CITEDESK_MODELS=local`), so build the API image with them: put `CITEDESK_API_EXTRAS=--extra models` in `.env` before `docker compose ... up --build`. The models are downloaded once at build time and baked into the image, so the container starts with no network access (tested). The image is about 980 MB (417 MB without the models). **Memory use on the $12 / 2 GB plan has not been measured**: check it with `docker stats` after the first questions and resize if needed.
+- **Pinecone:** with `CITEDESK_VECTOR_INDEX=pinecone` vectors persist across restarts and deploys; the index is repaired to match the database at every start. Run `uv run citedesk pinecone init` once (from any machine with the key) to create the index, and use `CITEDESK_ENVIRONMENT=prod` so production has its own namespace.

@@ -4,6 +4,8 @@ complete and make sure no real secret can ever be put in it."""
 import re
 from pathlib import Path
 
+import pytest
+
 from citedesk.config import Settings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,3 +57,30 @@ def test_the_example_values_are_valid_settings() -> None:
     assert settings.models == "offline"
     assert settings.database_url.startswith("sqlite:")
     assert settings.cors_origins == ["http://localhost:3000"]
+
+
+def test_a_throwaway_server_can_ignore_every_settings_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CITEDESK_ENV_FILE=/dev/null makes Settings ignore a developer's .env, so test servers cannot
+    pick up real keys or point at the real Pinecone index."""
+    import importlib
+
+    from citedesk import config
+
+    env_file = tmp_path / "real.env"
+    env_file.write_text("CITEDESK_VECTOR_INDEX=pinecone\nCITEDESK_WRITER=openai\n")
+    try:
+        monkeypatch.setenv("CITEDESK_ENV_FILE", str(env_file))
+        importlib.reload(config)
+        assert config.Settings.model_config["env_file"] == str(env_file)
+
+        monkeypatch.setenv("CITEDESK_ENV_FILE", "/dev/null")
+        importlib.reload(config)
+        # the pointed-at file is ignored: /dev/null is empty, so defaults apply
+        ignored = config.Settings(_env_file="/dev/null")  # type: ignore[call-arg]
+        assert ignored.vector_index == "memory"
+        assert ignored.writer == "extractive"
+    finally:
+        monkeypatch.delenv("CITEDESK_ENV_FILE", raising=False)
+        importlib.reload(config)

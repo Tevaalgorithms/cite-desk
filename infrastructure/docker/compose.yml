@@ -9,6 +9,10 @@ services:
     build:
       context: ../..
       dockerfile: infrastructure/docker/api.Dockerfile
+      args:
+        # Production uses the local embedding model and cross-encoder (CITEDESK_MODELS=local), so the
+        # image must contain them: set CITEDESK_API_EXTRAS="--extra models". Empty keeps the image small.
+        EXTRAS: ${CITEDESK_API_EXTRAS:-}
     restart: unless-stopped
     env_file: ../../.env
     environment:

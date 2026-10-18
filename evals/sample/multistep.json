@@ -1,0 +1,123 @@
+[
+  {
+    "id": "m-01",
+    "category": "multistep",
+    "question": "I am leaving next month and have a company laptop. What do I need to do?",
+    "answerable": true,
+    "gold_sections": [
+      "Equipment > Returning equipment",
+      "Leaving the company > Offboarding"
+    ]
+  },
+  {
+    "id": "m-02",
+    "category": "multistep",
+    "question": "How many vacation days and how many sick days do I get?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Vacation",
+      "Time off > Sick leave"
+    ]
+  },
+  {
+    "id": "m-03",
+    "category": "multistep",
+    "question": "What are the rules for travel bookings, meal reimbursement and receipts?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Travel",
+      "Expenses > Meals",
+      "Expenses > Receipts"
+    ]
+  },
+  {
+    "id": "m-04",
+    "category": "multistep",
+    "question": "After my parental leave, can I work from home and what do I need for that?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Parental leave",
+      "Working hours > Remote work"
+    ]
+  },
+  {
+    "id": "m-05",
+    "category": "multistep",
+    "question": "What are the password requirements and where do I report a suspicious login?",
+    "answerable": true,
+    "gold_sections": [
+      "Security > Passwords",
+      "Security > Reporting incidents"
+    ]
+  },
+  {
+    "id": "m-06",
+    "category": "multistep",
+    "question": "When must I be available during the day and how many days can I work remotely?",
+    "answerable": true,
+    "gold_sections": [
+      "Working hours > Core hours",
+      "Working hours > Remote work"
+    ]
+  },
+  {
+    "id": "m-07",
+    "category": "multistep",
+    "question": "How much can I claim for meals and how soon must I submit my receipts?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Meals",
+      "Expenses > Receipts"
+    ]
+  },
+  {
+    "id": "m-08",
+    "category": "multistep",
+    "question": "How long is parental leave and how many days of sick leave do employees get?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Parental leave",
+      "Time off > Sick leave"
+    ]
+  },
+  {
+    "id": "m-09",
+    "category": "multistep",
+    "question": "Which public holidays does the company observe and can I carry over unused vacation?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Public holidays",
+      "Time off > Vacation"
+    ]
+  },
+  {
+    "id": "m-10",
+    "category": "multistep",
+    "question": "If my laptop is stolen what do I do, and when must a security incident be reported?",
+    "answerable": true,
+    "gold_sections": [
+      "Equipment > Laptops",
+      "Security > Reporting incidents"
+    ]
+  },
+  {
+    "id": "m-11",
+    "category": "multistep",
+    "question": "Do I get a laptop on my first day, and what happens to my system access when I leave?",
+    "answerable": true,
+    "gold_sections": [
+      "Equipment > Laptops",
+      "Leaving the company > Offboarding"
+    ]
+  },
+  {
+    "id": "m-12",
+    "category": "multistep",
+    "question": "Do contractors get paid vacation, and who keeps this handbook up to date?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Vacation",
+      "About this handbook"
+    ]
+  }
+]

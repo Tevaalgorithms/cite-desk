@@ -44,7 +44,7 @@ def test_cross_encoder_ranks_the_relevant_passage_first() -> None:
     assert ranked[0].score > ranked[1].score
 
 
-@pytest.mark.parametrize("question_set", ["golden", "heldout"])
+@pytest.mark.parametrize("question_set", ["golden", "heldout", "multistep"])
 def test_local_backend_meets_its_baseline(
     question_set: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

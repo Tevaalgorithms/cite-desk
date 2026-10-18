@@ -95,6 +95,10 @@ uv run citedesk ssm pull --out prod.env     # write an owner-only settings file 
   ```
 - Rotation: there is no schedule. Rotate a key at its provider, update `.env`, then `citedesk ssm push --overwrite` and redeploy.
 
+### Production settings for the RAG pieces
+
+For production, store these as plain `String` parameters (`citedesk ssm push --only ...` after setting them in `.env`): `CITEDESK_ENVIRONMENT=prod` (this also gives production its own Pinecone namespace), `CITEDESK_MODELS=local`, `CITEDESK_VECTOR_INDEX=pinecone`. The API image must be built with the local models (`--build-arg EXTRAS="--extra models"`) because Pinecone's index size must match the embedding model. Keep `CITEDESK_LANGSMITH_TRACING` off in production until you have decided that handbook text may be sent to LangSmith (ADR-004, ADR-020).
+
 ## Delivery pipeline
 
 1. **Pull request:** lint, types, tests, verifier tests, retrieval and judged gates, secret scan, dependency audit (only the first three exist today).

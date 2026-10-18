@@ -4,8 +4,16 @@ import json
 from pathlib import Path
 
 # Metrics where a bigger number is better. For the rest, a smaller number is better.
-_HIGHER_IS_BETTER = ("recall_at_1", "recall_at_3", "recall_at_5", "mrr", "correct")
+_HIGHER_IS_BETTER = (
+    "recall_at_1",
+    "recall_at_3",
+    "recall_at_5",
+    "mrr",
+    "correct",
+    "coverage_complete",
+)
 _LOWER_IS_BETTER = ("confidently_wrong", "unanswerable_answered")
+_FRACTIONS = ("recall_at_1", "recall_at_3", "recall_at_5", "mrr")  # these may wobble slightly
 _TOLERANCE = 0.02  # fractions may wobble slightly between machines
 
 
@@ -21,7 +29,9 @@ def check_gates(summary: dict[str, float], baseline: dict[str, float]) -> list[s
     """Return one message per metric that is worse than the baseline (empty means pass)."""
     failures: list[str] = []
     for name in _HIGHER_IS_BETTER:
-        slack = _TOLERANCE if name != "correct" else 0.0
+        if name not in baseline:  # some metrics exist only for some question sets
+            continue
+        slack = _TOLERANCE if name in _FRACTIONS else 0.0
         if summary[name] < baseline[name] - slack:
             failures.append(f"{name} fell to {summary[name]} (baseline {baseline[name]})")
     for name in _LOWER_IS_BETTER:
