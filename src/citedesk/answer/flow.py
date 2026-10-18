@@ -41,8 +41,11 @@ class FlowState(TypedDict, total=False):
 
 def build_answer_flow(
     retrieve: Retrieve, writer: AnswerWriter, *, max_attempts: int = 2
-) -> Callable[[str, int], Answer]:
-    """Return a function `ask(question, corpus_version) -> Answer`."""
+) -> Callable[..., Answer]:
+    """Return a function `ask(question, corpus_version, run_config=None) -> Answer`.
+
+    `run_config` labels the run in traces (for example its name and metadata).
+    """
 
     def retrieve_node(state: FlowState) -> FlowState:
         return {"passages": retrieve(state["question"]), "attempts": 0}
@@ -113,9 +116,9 @@ def build_answer_flow(
     graph.add_edge("refuse", END)
     compiled: Any = graph.compile()
 
-    def ask(question: str, corpus_version: int) -> Answer:
+    def ask(question: str, corpus_version: int, run_config: dict[str, Any] | None = None) -> Answer:
         final_state: FlowState = compiled.invoke(
-            {"question": question, "corpus_version": corpus_version}
+            {"question": question, "corpus_version": corpus_version}, config=run_config
         )
         return final_state["answer"]
 

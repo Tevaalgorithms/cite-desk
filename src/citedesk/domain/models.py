@@ -101,6 +101,7 @@ class Answer(_Frozen):
     refused: bool = False
     refusal_reason: str | None = None
     corpus_version: int = 0
+    from_cache: bool = False  # True when an earlier identical question was answered
 
 
 def searchable_text(document_title: str, section_path: str, text: str) -> str:

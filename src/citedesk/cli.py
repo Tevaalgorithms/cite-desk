@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from citedesk.api.auth import issue_token
-from citedesk.bootstrap import App, build_app
+from citedesk.bootstrap import App, build_app, build_index, build_models
 from citedesk.config import Settings
 from citedesk.evaluation.gates import check_gates, load_baseline
 from citedesk.evaluation.runner import format_report, run_evaluation, summarize
+from citedesk.indexing import sync_vector_index
 from citedesk.ingestion.parsing import ContentType, ParseError
 from citedesk.ingestion.service import (
     DocumentNotFoundError,
@@ -32,6 +33,7 @@ from citedesk.ops.ssm import (
     SsmError,
     read_env_file,
 )
+from citedesk.storage.repository import SqlRepository
 
 _ACTOR = "cli"
 _CONTENT_TYPES: dict[str, ContentType] = {".md": "markdown", ".html": "html", ".htm": "html"}
@@ -58,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
             return _serve(args)
         if args.command == "ssm":
             return _ssm(args)
+        if args.command == "pinecone":
+            return _pinecone(args)
         return _COMMANDS[args.command](build_app(), args)
     except _EXPECTED_ERRORS as error:
         print(f"Error: {error}", file=sys.stderr)
@@ -109,6 +113,7 @@ def _list(app: App, args: argparse.Namespace) -> int:
 
 def _ask(app: App, args: argparse.Namespace) -> int:
     answer = app.answers.ask(args.question)
+    app.tracer.flush()  # a short-lived command must send its traces before it exits
     if answer.refused:
         print(f"I can't answer that from the handbook ({answer.refusal_reason}).")
         return 0
@@ -148,6 +153,40 @@ def _serve(args: argparse.Namespace) -> int:
         "citedesk.api.main:create_production_app", factory=True, host=args.host, port=args.port
     )
     return 0
+
+
+# --- Pinecone vector index -----------------------------------------------------------------
+
+
+def _pinecone(args: argparse.Namespace) -> int:
+    """Create, inspect or repair the Pinecone index. Uses CITEDESK_PINECONE_* settings."""
+    settings = Settings().model_copy(update={"vector_index": "pinecone"})
+    embedder, _ = build_models(settings)
+    index = build_index(settings, embedder)  # creates the index on first use
+    repository = SqlRepository.from_url(settings.database_url)
+    where = f"{settings.pinecone_index} / namespace {settings.vector_namespace}"
+
+    if args.pinecone_command == "init":
+        print(f"Index ready: {where} ({embedder.dimension} numbers per vector, cosine)")
+        return 0
+
+    if args.pinecone_command == "sync":
+        report = sync_vector_index(repository, embedder, index)
+        print(
+            f"{where}: {report.published} published, {report.added} added, {report.removed} removed"
+        )
+        return 0
+
+    wanted = {p.chunk_id for p in repository.published_passages()}
+    stored = index.ids()
+    print(f"{where}")
+    print(f"  vectors stored    : {len(stored)}")
+    print(f"  chunks published  : {len(wanted)}")
+    print(f"  missing from index: {len(wanted - stored)}")
+    print(f"  extra in index    : {len(stored - wanted)}")
+    in_sync = stored == wanted
+    print("  in sync           : " + ("yes" if in_sync else "NO (run `citedesk pinecone sync`)"))
+    return 0 if in_sync else 1
 
 
 # --- production secrets in AWS SSM Parameter Store ------------------------------------------
@@ -281,6 +320,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pull.add_argument("--out", type=Path, required=True)
     pull.add_argument("--only", nargs="+", metavar="NAME")
+
+    pinecone = commands.add_parser("pinecone", help="manage the Pinecone vector index")
+    pinecone_commands = pinecone.add_subparsers(dest="pinecone_command", required=True)
+    pinecone_commands.add_parser("init", help="create the index if it does not exist")
+    pinecone_commands.add_parser("status", help="compare the index with the published chunks")
+    pinecone_commands.add_parser("sync", help="repair the index so it matches the database")
 
     token = commands.add_parser("token", help="print a development sign-in token")
     token.add_argument("--user", required=True)

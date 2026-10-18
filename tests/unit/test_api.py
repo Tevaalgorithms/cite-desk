@@ -200,6 +200,7 @@ def test_url_import_works_through_the_api(app: App) -> None:
         index=app.index,
         reranker=app.reranker,
         model=app.model,
+        tracer=app.tracer,
     )
     api = TestClient(create_api(wired, Settings(jwt_dev_secret=SECRET)))
     response = api.post(
@@ -256,6 +257,7 @@ def test_unexpected_errors_do_not_leak_details(app: App) -> None:
         index=app.index,
         reranker=app.reranker,
         model=app.model,
+        tracer=app.tracer,
     )
     api = TestClient(
         create_api(broken, Settings(jwt_dev_secret=SECRET)), raise_server_exceptions=False
@@ -368,6 +370,7 @@ def _with_model(app: App, model: object) -> TestClient:
         ingestion=app.ingestion, answers=app.answers, repository=app.repository,
         embedder=app.embedder, index=app.index, reranker=app.reranker,
         model=model,  # type: ignore[arg-type]
+        tracer=app.tracer,
     )  # fmt: skip
     return TestClient(
         create_api(wired, Settings(jwt_dev_secret=SECRET, rate_limit_per_minute=1000))

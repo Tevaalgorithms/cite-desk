@@ -4,24 +4,26 @@ ingestion and the answer flow, so the two stay independent of each other.
 
 from dataclasses import dataclass
 
+from citedesk.answer.cache import AnswerCache
 from citedesk.answer.rerankers import OverlapReranker
 from citedesk.answer.retrieval import HybridRetriever
 from citedesk.answer.service import AnswerService
 from citedesk.answer.writers import ExtractiveAnswerWriter
 from citedesk.config import Settings
-from citedesk.domain.models import ModelHealth, ModelInfo, UsageSnapshot, searchable_text
+from citedesk.domain.models import ModelHealth, ModelInfo, UsageSnapshot
 from citedesk.domain.ports import (
     AnswerWriter,
     Embedder,
-    IndexItem,
     ModelStatus,
     Reranker,
     VectorIndex,
 )
+from citedesk.indexing import sync_vector_index
 from citedesk.ingestion.fetching import UrlFetcher
 from citedesk.ingestion.service import IngestionService
 from citedesk.storage.dev_adapters import HashingEmbedder, InMemoryVectorIndex
 from citedesk.storage.repository import SqlRepository
+from citedesk.tracing import Tracer
 
 
 @dataclass(frozen=True)
@@ -34,21 +36,23 @@ class App:
     index: VectorIndex
     reranker: Reranker
     model: ModelStatus  # describes and checks whichever writer is in use
+    tracer: Tracer
 
 
 def build_app(settings: Settings | None = None, *, writer: AnswerWriter | None = None) -> App:
-    """Build the app with the offline dev adapters.
+    """Build the whole app from settings.
 
-    The in-memory vector index forgets everything when the process exits, so published
-    documents are loaded back into it here. A real vector database would not need this.
-    Pass `writer` to replace the default extractive answer writer.
+    At start the vector index is repaired to match the database (see `sync_vector_index`), so a
+    restarted in-memory index or a drifted Pinecone index is refilled before the first question.
+    Pass `writer` to replace the answer writer chosen by the settings (used by tests).
     """
     settings = settings or Settings()
     repository = SqlRepository.from_url(settings.database_url)
+    tracer = build_tracer(settings)
     embedder, reranker = build_models(settings)
-    chosen_writer = writer or build_writer(settings)
-    index = InMemoryVectorIndex()
-    _reload_index(repository, embedder, index)
+    chosen_writer = writer or build_writer(settings, tracer)
+    index = build_index(settings, embedder)
+    sync_vector_index(repository, embedder, index)
 
     retriever = HybridRetriever(
         embedder,
@@ -57,6 +61,12 @@ def build_app(settings: Settings | None = None, *, writer: AnswerWriter | None =
         candidate_limit=settings.candidate_limit,
         rerank_pool=settings.rerank_pool,
         final_limit=settings.final_passage_limit,
+    )
+    model = _model_status(chosen_writer)
+    description = model.info()
+    # Anything that changes what an answer says must be part of the cache label.
+    cache_label = "|".join(
+        [description.writer, description.model, settings.models, str(settings.relevance_threshold)]
     )
     return App(
         ingestion=IngestionService(
@@ -73,22 +83,57 @@ def build_app(settings: Settings | None = None, *, writer: AnswerWriter | None =
             chosen_writer,
             min_relevance=settings.relevance_threshold,
             max_attempts=settings.max_answer_attempts,
+            cache=AnswerCache(settings.answer_cache_size, settings.answer_cache_ttl_seconds),
+            cache_label=cache_label,
+            tracer=tracer,
+            trace_metadata={
+                "environment": settings.environment,
+                "writer": description.writer,
+                "model": description.model,
+                "models": settings.models,
+                "vector_index": settings.vector_index,
+            },
         ),
         repository=repository,
         embedder=embedder,
         index=index,
         reranker=reranker,
-        model=_model_status(chosen_writer),
+        model=model,
+        tracer=tracer,
     )
 
 
-RETRIEVAL_DESCRIPTIONS = {
-    "local": "Embeddings: bge-small-en-v1.5. Reranker: ms-marco MiniLM. Both run locally.",
-    "offline": "Embeddings and reranker: word-matching stand-ins (no models).",
-}
+def describe_retrieval(settings: Settings) -> str:
+    """One sentence about how passages are found, for the model status bar's tooltip."""
+    models = (
+        "Embeddings: bge-small-en-v1.5. Reranker: ms-marco MiniLM. Both run locally."
+        if settings.models == "local"
+        else "Embeddings and reranker: word-matching stand-ins (no models)."
+    )
+    vectors = (
+        f"Vectors: Pinecone ({settings.pinecone_index}, namespace {settings.vector_namespace})."
+        if settings.vector_index == "pinecone"
+        else "Vectors: in memory."
+    )
+    return f"{models} {vectors}"
 
 
-def build_writer(settings: Settings) -> AnswerWriter:
+def build_tracer(settings: Settings) -> Tracer:
+    """A LangSmith tracer if CITEDESK_LANGSMITH_TRACING is on, otherwise one that does nothing."""
+    if not settings.langsmith_tracing:
+        return Tracer()
+    if settings.langsmith_api_key is None:
+        raise RuntimeError(
+            "CITEDESK_LANGSMITH_TRACING=true needs CITEDESK_LANGSMITH_API_KEY to be set."
+        )
+    return Tracer.create(
+        settings.langsmith_api_key.get_secret_value(),
+        settings.langsmith_project,
+        hide_content=settings.langsmith_hide_content,
+    )
+
+
+def build_writer(settings: Settings, tracer: Tracer | None = None) -> AnswerWriter:
     """The answer writer chosen by CITEDESK_WRITER."""
     if settings.writer == "openai":
         if settings.openai_api_key is None:
@@ -104,10 +149,10 @@ def build_writer(settings: Settings) -> AnswerWriter:
             max_retries=1,
         )
         return OpenAIAnswerWriter(
-            client,
+            (tracer or Tracer()).wrap_openai(client),
             settings.openai_model,
             max_output_tokens=settings.openai_max_output_tokens,
-            retrieval_description=RETRIEVAL_DESCRIPTIONS[settings.models],
+            retrieval_description=describe_retrieval(settings),
         )
     return ExtractiveAnswerWriter()
 
@@ -129,6 +174,29 @@ def _model_status(writer: AnswerWriter) -> ModelStatus:
     return writer if isinstance(writer, ModelStatus) else _PlainModelStatus()
 
 
+def build_index(settings: Settings, embedder: Embedder) -> VectorIndex:
+    """The vector index chosen by CITEDESK_VECTOR_INDEX."""
+    if settings.vector_index == "pinecone":
+        if settings.pinecone_api_key is None:
+            raise RuntimeError(
+                "CITEDESK_VECTOR_INDEX=pinecone needs CITEDESK_PINECONE_API_KEY to be set."
+            )
+        # Imported here so the in-memory index works without touching the Pinecone SDK.
+        from citedesk.adapters.pinecone_index import PineconeVectorIndex, ensure_index
+        from pinecone import Pinecone
+
+        client = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
+        host = ensure_index(
+            client,
+            settings.pinecone_index,
+            dimension=embedder.dimension,
+            cloud=settings.pinecone_cloud,
+            region=settings.pinecone_region,
+        )
+        return PineconeVectorIndex(client.Index(host=host), settings.vector_namespace)
+    return InMemoryVectorIndex()
+
+
 def build_models(settings: Settings) -> tuple[Embedder, Reranker]:
     """The embedding model and reranker for the chosen backend."""
     if settings.models == "local":
@@ -137,16 +205,3 @@ def build_models(settings: Settings) -> tuple[Embedder, Reranker]:
 
         return FastEmbedEmbedder(), CrossEncoderReranker()
     return HashingEmbedder(), OverlapReranker()
-
-
-def _reload_index(repository: SqlRepository, embedder: Embedder, index: VectorIndex) -> None:
-    passages = repository.published_passages()
-    vectors = embedder.embed(
-        [searchable_text(p.document_title, p.section_path, p.text) for p in passages]
-    )
-    index.upsert(
-        [
-            IndexItem(passage.chunk_id, passage.document_id, vector)
-            for passage, vector in zip(passages, vectors, strict=True)
-        ]
-    )

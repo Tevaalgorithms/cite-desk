@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ModelBackend = Literal["offline", "local"]
 WriterKind = Literal["extractive", "openai"]
+VectorIndexKind = Literal["memory", "pinecone"]
 
 # Relevance thresholds only mean something for the reranker they were calibrated on.
 OFFLINE_MIN_RELEVANCE = 0.5
@@ -33,6 +34,28 @@ class Settings(BaseSettings):
     # cross-encoder on this machine (needs `uv sync --extra models`).
     models: ModelBackend = "offline"
 
+    # Names this deployment, for example "dev" or "prod". It labels traces and, unless set
+    # explicitly, names the Pinecone namespace so environments never share vectors.
+    environment: str = "dev"
+
+    # Tracing of each answer in LangSmith. OFF by default: traces contain the question and, unless
+    # hidden, the handbook passages. See src/citedesk/tracing.py.
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = "cite-desk"
+    langsmith_hide_content: bool = False
+
+    # Where vectors are kept. "memory" forgets them when the process stops (they are rebuilt from
+    # the database at start). "pinecone" keeps them in a Pinecone serverless index.
+    vector_index: VectorIndexKind = "memory"
+    pinecone_api_key: SecretStr | None = None
+    pinecone_index: str = "cite-desk"
+    # One namespace per environment, so development and production never see each other's vectors.
+    # Leave unset to use CITEDESK_ENVIRONMENT.
+    pinecone_namespace: str | None = None
+    pinecone_cloud: str = "aws"
+    pinecone_region: str = "us-east-1"  # the region available on Pinecone's free plan
+
     # Who writes the answer text. "extractive" quotes the best sentence (no model, no key). "openai"
     # asks a language model, which can combine passages, and needs CITEDESK_OPENAI_API_KEY.
     writer: WriterKind = "extractive"
@@ -42,6 +65,10 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.4-nano"
     openai_max_output_tokens: int = 400
     openai_timeout_seconds: float = 30.0
+
+    # Verified answers are remembered in memory (0 turns the cache off).
+    answer_cache_size: int = 500
+    answer_cache_ttl_seconds: int = 3600
 
     # Passages scoring below this relevance after reranking are dropped, so the assistant
     # refuses instead of answering from unrelated text. Leave unset to use the calibrated
@@ -71,3 +98,7 @@ class Settings(BaseSettings):
         if self.min_relevance is not None:
             return self.min_relevance
         return LOCAL_MIN_RELEVANCE if self.models == "local" else OFFLINE_MIN_RELEVANCE
+
+    @property
+    def vector_namespace(self) -> str:
+        return self.pinecone_namespace or self.environment

@@ -21,6 +21,8 @@ from citedesk.domain.models import (
 
 
 class Embedder(Protocol):
+    dimension: int  # numbers per vector; a vector database index must be created with this size
+
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed passages for indexing."""
         ...
@@ -42,6 +44,12 @@ class VectorIndex(Protocol):
     def upsert(self, items: Sequence[IndexItem]) -> None: ...
 
     def delete_document(self, document_id: str) -> None: ...
+
+    def ids(self) -> set[str]:
+        """Every chunk id currently stored."""
+        ...
+
+    def delete_ids(self, chunk_ids: Sequence[str]) -> None: ...
 
     def search(self, vector: Sequence[float], limit: int) -> list[tuple[str, float]]:
         """Return (chunk_id, similarity), best first."""
