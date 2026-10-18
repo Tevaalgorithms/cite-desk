@@ -1,19 +1,30 @@
 """Build a throwaway app on the sample handbook and print the evaluation tables."""
 
 import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from citedesk.bootstrap import App, build_app
 from citedesk.config import ModelBackend, Settings
+from citedesk.domain.models import ModelInfo, UsageSnapshot
 from citedesk.evaluation.answers import AnswerReport, evaluate_answers
 from citedesk.evaluation.golden import GoldenCase, load_golden_cases
 from citedesk.evaluation.retrieval import STAGES, RetrievalReport, evaluate_retrieval
 from citedesk.evaluation.threshold import ThresholdSuggestion, suggest_threshold
 
 
-def build_sample_app(models: ModelBackend, handbook: Path, database_dir: Path) -> App:
-    settings = Settings(database_url=f"sqlite:///{database_dir / 'eval.db'}", models=models)
-    app = build_app(settings)
+def build_sample_app(
+    models: ModelBackend, handbook: Path, database_dir: Path, **settings: Any
+) -> App:
+    """An app on a throwaway database with the sample handbook published.
+
+    Extra keyword arguments override settings, for example `writer="openai"`.
+    """
+    app = build_app(
+        Settings(database_url=f"sqlite:///{database_dir / 'eval.db'}", models=models, **settings)
+    )
     document = app.ingestion.add_text(
         handbook.read_text(encoding="utf-8"),
         content_type="markdown",
@@ -26,26 +37,49 @@ def build_sample_app(models: ModelBackend, handbook: Path, database_dir: Path) -
     return app
 
 
+@dataclass(frozen=True)
+class EvaluationRun:
+    retrieval: RetrievalReport
+    suggestion: ThresholdSuggestion
+    answers: AnswerReport
+    threshold: float
+    cases: list[GoldenCase]
+    model: ModelInfo
+    usage: UsageSnapshot | None  # model calls and tokens spent by the answer step
+    answer_seconds: float  # wall-clock time to answer every question
+
+
 def run_evaluation(
-    models: ModelBackend, handbook: Path, golden: Path
-) -> tuple[RetrievalReport, ThresholdSuggestion, AnswerReport, float, list[GoldenCase]]:
+    models: ModelBackend, handbook: Path, golden: Path, **settings: Any
+) -> EvaluationRun:
     cases = load_golden_cases(golden)
     with tempfile.TemporaryDirectory() as folder:
-        app = build_sample_app(models, handbook, Path(folder))
+        app = build_sample_app(models, handbook, Path(folder), **settings)
         retrieval = evaluate_retrieval(app, cases)
+        started = time.monotonic()
         answers = evaluate_answers(app, cases)
-    threshold = Settings(models=models).relevance_threshold
-    return retrieval, suggest_threshold(cases, retrieval.top_scores), answers, threshold, cases
+        answer_seconds = time.monotonic() - started
+        model, usage = app.model.info(), app.model.usage()
+    return EvaluationRun(
+        retrieval=retrieval,
+        suggestion=suggest_threshold(cases, retrieval.top_scores),
+        answers=answers,
+        threshold=Settings(models=models).relevance_threshold,
+        cases=cases,
+        model=model,
+        usage=usage,
+        answer_seconds=answer_seconds,
+    )
 
 
-def format_report(
-    models: ModelBackend,
-    retrieval: RetrievalReport,
-    suggestion: ThresholdSuggestion,
-    answers: AnswerReport,
-    threshold: float,
-) -> str:
-    lines = [f"Backend: {models}   questions: {retrieval.questions}", ""]
+def format_report(models: ModelBackend, run: EvaluationRun) -> str:
+    retrieval, suggestion = run.retrieval, run.suggestion
+    answers, threshold = run.answers, run.threshold
+    lines = [
+        f"Backend: {models}   questions: {retrieval.questions}",
+        f"Answer writer: {run.model.provider} / {run.model.model}",
+        "",
+    ]
     lines.append("Retrieval: did the right section appear? (answerable questions)")
     lines.append(f"{'stage':<15}{'group':<14}{'R@1':>6}{'R@3':>6}{'R@5':>6}{'MRR':>7}")
     for stage in STAGES:
@@ -73,6 +107,16 @@ def format_report(
         f"  unanswerable answered anyway       : {answers.unanswerable_answered}",
     ]
     lines += [f"    - {problem}" for problem in answers.problems]
+    if run.usage is not None:
+        calls = run.usage.calls or 1
+        lines += [
+            "",
+            f"Model usage: {run.usage.calls} calls in {run.answer_seconds:.1f} s",
+            f"  prompt tokens      : {run.usage.prompt_tokens} "
+            f"({run.usage.prompt_tokens // calls} per call)",
+            f"  completion tokens  : {run.usage.completion_tokens} "
+            f"({run.usage.completion_tokens // calls} per call)",
+        ]
     return "\n".join(lines)
 
 

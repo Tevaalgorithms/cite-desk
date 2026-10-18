@@ -15,6 +15,7 @@ from citedesk.ops.ssm import (
     ParameterStore,
     SsmError,
     fingerprint,
+    parameter_type,
     read_env_file,
 )
 
@@ -242,3 +243,30 @@ def test_cli_reports_a_missing_env_file_without_a_traceback(
 ) -> None:
     assert main(["ssm", "push", "--env-file", "/nonexistent/.env"]) == 1
     assert "Error" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("variable", "expected"),
+    [
+        ("CITEDESK_OPENAI_API_KEY", "SecureString"),
+        ("CITEDESK_PINECONE_API_KEY", "SecureString"),
+        ("CITEDESK_JWT_DEV_SECRET", "SecureString"),
+        ("CITEDESK_LOCAL_DB_PASSWORD", "SecureString"),
+        ("CITEDESK_DATABASE_URL", "SecureString"),
+        ("CITEDESK_OPENAI_MODEL", "String"),
+        ("CITEDESK_WRITER", "String"),
+        ("CITEDESK_OPENAI_MAX_OUTPUT_TOKENS", "String"),  # "TOKENS" is a count, not a token
+    ],
+)
+def test_secrets_are_encrypted_and_plain_settings_are_readable(
+    variable: str, expected: str
+) -> None:
+    assert parameter_type(variable) == expected
+
+
+def test_a_plain_setting_is_stored_as_a_string_parameter(
+    store: ParameterStore, aws: FakeAws
+) -> None:
+    store.push({"CITEDESK_OPENAI_MODEL": "gpt-5.4-nano", "CITEDESK_OPENAI_API_KEY": SECRET})
+    assert aws.parameters[f"{PATH}CITEDESK_OPENAI_MODEL"]["Type"] == "String"
+    assert aws.parameters[f"{PATH}CITEDESK_OPENAI_API_KEY"]["Type"] == "SecureString"

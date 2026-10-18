@@ -28,6 +28,10 @@ DEFAULT_SECRETS = (
 )
 
 _NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+# A setting is encrypted (SecureString) when its name contains one of these whole words, or it is
+# listed below. Everything else, such as the model name, is stored as plain readable text.
+_SECRET_WORD = re.compile(r"(^|_)(KEY|SECRET|TOKEN|PASSWORD)($|_)")
+_ALWAYS_ENCRYPTED = frozenset({"CITEDESK_DATABASE_URL"})  # a connection string holds a password
 _LINE = re.compile(r"^\s*([A-Z][A-Z0-9_]*)=(.*)$")
 
 Runner = Callable[[Sequence[str]], "CommandResult"]
@@ -50,6 +54,13 @@ def run_aws(arguments: Sequence[str]) -> CommandResult:
         ["aws", *arguments], capture_output=True, text=True, check=False, timeout=60
     )
     return CommandResult(completed.returncode, completed.stdout, completed.stderr)
+
+
+def parameter_type(variable: str) -> str:
+    """ "SecureString" for anything secret, otherwise "String"."""
+    if variable in _ALWAYS_ENCRYPTED or _SECRET_WORD.search(variable):
+        return "SecureString"
+    return "String"
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -91,7 +102,7 @@ class ParameterStore:
         return f"{self._path}{variable}"
 
     def push(self, values: Mapping[str, str], *, overwrite: bool = False) -> dict[str, str]:
-        """Store each value as a SecureString. Returns variable -> "created" / "updated" / "kept".
+        """Store each value (encrypted if it is a secret). Returns variable -> "created" etc.
 
         Without `overwrite`, a parameter that already exists is left alone ("kept").
         """
@@ -172,7 +183,7 @@ class ParameterStore:
         body = {
             "Name": name,
             "Value": value,
-            "Type": "SecureString",
+            "Type": parameter_type(variable),
             "Description": f"CiteDesk production setting {variable}",
             "Overwrite": update,
         }

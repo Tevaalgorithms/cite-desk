@@ -28,6 +28,24 @@ Real local models versus the offline stand-ins, final pipeline (fused + reranked
 
 Reading it: the real models clearly beat the stand-ins on finding the right section and on answering paraphrased questions. Both still sometimes answer an unanswerable question that is close to a covered topic (2 of 14 unanswerable questions across the local runs). Before reranking, plain vector search beat the fused keyword-plus-vector ranking on paraphrases (Recall@1 0.90 versus 0.81 on `golden`), and the reranker repaired that, which is why hybrid retrieval is only worth it with a reranker here.
 
+## Choosing the answer model (measured 2026-10-17)
+
+The same 51 sample questions (all three sets) were answered with the real model, using the local embedding model and cross-encoder for retrieval. `citedesk eval-retrieval --models local --writer openai --openai-model <name>` repeats this.
+
+| | Quoting writer (no model) | `gpt-5.4-nano` | `gpt-5.4-mini` |
+| --- | --- | --- | --- |
+| Answerable questions answered correctly | 34 of 37 | 34 of 37 | 35 of 37 |
+| Cited a wrong section | 1 | 0 | 0 |
+| Unanswerable questions answered anyway | 3 of 14 | 0 of 14 | 0 of 14 |
+| Answer time per question | instant | about 0.9 s | about 0.9 s |
+| Tokens per question | none | about 300 in, 18 out | about 300 in, 18 out |
+| Approximate cost per question | none | about $0.00008 | about $0.0003 |
+
+- **What the model adds.** On questions the handbook can answer, all three are close (34, 34 and 35 of 37). The difference is on questions it cannot answer: the quoting writer answered 3 of 14 of them from a nearby passage (for example the cafeteria price), while both models refused all 14, because they can say the passages do not answer the question. They can also combine facts ("16 weeks, which can start up to 2 weeks before the birth"), which the quoting writer cannot.
+- **Nano versus mini.** They differ on 1 of 37 answerable questions, and the difference was a safe refusal ("Are two-factor logins mandatory?", where the handbook says only administrators must use it). The MVP default is therefore the cheaper `gpt-5.4-nano`. Switch with `CITEDESK_OPENAI_MODEL=gpt-5.4-mini`; no code change.
+- **Prices.** `gpt-5.4-nano`: $0.20 per million input tokens and $1.25 per million output, from [OpenAI's model page](https://developers.openai.com/docs/models/gpt-5.4-nano). `gpt-5.4-mini`: $0.75 and $4.50, from a third-party tracker only ([source](https://pricepertoken.com/pricing-page/model/openai-gpt-5.4-mini)), unconfirmed. The per-question costs above are my arithmetic from these prices and the measured tokens. Re-check prices before budgeting.
+- **Limits of this evidence.** 37 answerable and 14 unanswerable synthetic questions, written by the same author as the handbook, on short passages (about 300 prompt tokens per call). A real handbook has longer sections, so expect more tokens per question (up to roughly 6 passages of about 300 tokens each). Real-model scores on `golden` benefit from a threshold calibrated on that set. A single run per model; results at temperature 0 can still vary a little.
+
 ## Setting up judged evaluation: what you need to provide
 
 RAGAS and DeepEval score answers with a language model acting as judge. Nothing runs until these are decided:

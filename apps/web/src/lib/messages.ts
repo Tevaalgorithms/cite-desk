@@ -11,6 +11,14 @@ const REFUSALS: Record<string, { title: string; body: string }> = {
     title: "I couldn't verify an answer",
     body: "I found related text but could not back up every statement with a source, so I'm not going to guess.",
   },
+  passages_do_not_answer: {
+    title: "The handbook doesn't answer that",
+    body: "I found related text, but it does not actually answer your question, so I won't guess.",
+  },
+  model_unavailable: {
+    title: "The AI model isn't reachable right now",
+    body: "Your question was not answered. Please try again in a moment.",
+  },
   empty_question: {
     title: "Ask a question",
     body: "Type a question about the handbook.",

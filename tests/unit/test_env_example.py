@@ -9,7 +9,8 @@ from citedesk.config import Settings
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / ".env.example"
 _LINE = re.compile(r"^(#\s*)?([A-Z][A-Z0-9_]+)=(.*)$")
-_SECRET_NAME = re.compile(r"(KEY|SECRET|TOKEN|PASSWORD)")
+# Whole words only: OPENAI_API_KEY is a secret, MAX_OUTPUT_TOKENS is not.
+_SECRET_NAME = re.compile(r"(^|_)(KEY|SECRET|TOKEN|PASSWORD)($|_)")
 _SECRET_LOOKING_VALUE = re.compile(
     r"(sk-[A-Za-z0-9_-]{10,}|pcsk_|pc-[A-Za-z0-9]{10,}|lsv2_|ls__|AKIA[0-9A-Z]{12,})"
 )

@@ -2,9 +2,11 @@
 
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ModelBackend = Literal["offline", "local"]
+WriterKind = Literal["extractive", "openai"]
 
 # Relevance thresholds only mean something for the reranker they were calibrated on.
 OFFLINE_MIN_RELEVANCE = 0.5
@@ -30,6 +32,16 @@ class Settings(BaseSettings):
     # "offline": word-matching stand-ins, no downloads. "local": real embedding model and
     # cross-encoder on this machine (needs `uv sync --extra models`).
     models: ModelBackend = "offline"
+
+    # Who writes the answer text. "extractive" quotes the best sentence (no model, no key). "openai"
+    # asks a language model, which can combine passages, and needs CITEDESK_OPENAI_API_KEY.
+    writer: WriterKind = "extractive"
+    openai_api_key: SecretStr | None = None  # never printed: SecretStr hides it in logs and repr
+    # Chosen by measurement (see docs/evaluation): nearly the same quality as gpt-5.4-mini on the
+    # sample questions at a lower price. Change it with CITEDESK_OPENAI_MODEL.
+    openai_model: str = "gpt-5.4-nano"
+    openai_max_output_tokens: int = 400
+    openai_timeout_seconds: float = 30.0
 
     # Passages scoring below this relevance after reranking are dropped, so the assistant
     # refuses instead of answering from unrelated text. Leave unset to use the calibrated

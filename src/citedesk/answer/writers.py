@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from citedesk.domain.models import Passage
+from citedesk.domain.models import ModelHealth, ModelInfo, Passage, UsageSnapshot
 from citedesk.text import content_tokens, split_sentences
 
 
@@ -21,6 +21,20 @@ class ExtractiveAnswerWriter:
             return ""
         sentence = self._best_sentence(set(content_tokens(question)), passages[0])
         return f"{sentence.rstrip('.!?')} [1]." if sentence else ""
+
+    def info(self) -> ModelInfo:
+        return ModelInfo(
+            writer="extractive",
+            provider="built-in",
+            model="extractive quoting",
+            description="No language model: the answer quotes the best sentence from the sources.",
+        )
+
+    def check(self) -> ModelHealth:
+        return ModelHealth(state="offline", detail="No language model in use")
+
+    def usage(self) -> UsageSnapshot | None:
+        return None
 
     @staticmethod
     def _best_sentence(wanted: set[str], passage: Passage) -> str | None:

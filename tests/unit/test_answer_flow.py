@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 from citedesk.bootstrap import App
+from citedesk.domain.errors import WriterUnavailableError
 from citedesk.domain.models import Passage
 from tests.conftest import SECOND_DOCUMENT
 
@@ -99,3 +100,55 @@ def test_a_strong_match_is_not_padded_with_weaker_passages(published_app: App) -
 def test_citation_paths_do_not_repeat_the_document_title(published_app: App) -> None:
     answer = published_app.answers.ask("How many vacation days do I get?")
     assert answer.citations[0].section_path == "Time off > Vacation"
+
+
+class _AbstainingWriter:
+    """Says the passages do not answer the question (returns nothing)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def write(self, question: str, passages: Sequence[Passage], *, strict: bool) -> str:
+        self.calls += 1
+        return ""
+
+
+class _OfflineWriter:
+    def write(self, question: str, passages: Sequence[Passage], *, strict: bool) -> str:
+        raise WriterUnavailableError("Cannot reach OpenAI")
+
+
+_VACATION = (
+    "# Handbook\n\n## Vacation\n\nFull-time employees receive 20 days of paid vacation each year. "
+    "Unused days carry over for up to 5 days."
+)
+
+
+def _published(app: App) -> None:
+    document = app.ingestion.add_text(
+        _VACATION, content_type="markdown", title="Handbook", source_name="tests",
+        actor="tester", license="CC0",
+    )  # fmt: skip
+    app.ingestion.publish(document.id, actor="tester")
+
+
+def test_a_writer_that_says_the_passages_do_not_answer_gives_an_honest_refusal(make_app) -> None:  # type: ignore[no-untyped-def]
+    writer = _AbstainingWriter()
+    app = make_app(writer)
+    _published(app)
+
+    answer = app.answers.ask("How many vacation days do I get?")
+
+    assert answer.refused
+    assert answer.refusal_reason == "passages_do_not_answer"
+    assert writer.calls == 1  # no pointless retry: the answer would be the same
+
+
+def test_an_unreachable_model_gives_a_clear_refusal_not_an_error(make_app) -> None:  # type: ignore[no-untyped-def]
+    app = make_app(_OfflineWriter())
+    _published(app)
+
+    answer = app.answers.ask("How many vacation days do I get?")
+
+    assert answer.refused
+    assert answer.refusal_reason == "model_unavailable"

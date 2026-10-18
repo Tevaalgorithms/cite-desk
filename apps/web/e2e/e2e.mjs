@@ -136,6 +136,14 @@ await step("B2", "analyst signs in; no Admin link; example questions shown", asy
   expect((await page.locator(".example").count()) >= 3, "no example questions");
   await page.screenshot({ path: `${shots}/02-chat-empty.png` });
 });
+await step("B2b", "the status bar names the answering model; the built-in writer is Offline with no check button", async () => {
+  const badge = page.getByTestId("model-badge");
+  await badge.waitFor({ timeout: 8000 });
+  const text = (await badge.innerText()).replace(/\s+/g, " ").trim();
+  expect(text === "Offline · built-in · extractive quoting", `badge said: ${text}`);
+  expect((await page.getByRole("button", { name: "Check connection" }).count()) === 0, "nothing to check for the built-in writer");
+  await page.screenshot({ path: `${shots}/02b-model-bar.png` });
+});
 await step("B3", "before anything is published, a question is refused kindly", async () => {
   await ask("How many vacation days do I get?");
   await page.getByText("couldn't find that in the handbook").waitFor({ timeout: 8000 });

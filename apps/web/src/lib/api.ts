@@ -1,6 +1,13 @@
 // A thin, typed wrapper around the CiteDesk API. All calls need a sign-in token.
 
-import type { Answer, AuditEntry, ChunkInfo, DocumentInfo, NewDocument } from "./types";
+import type {
+  Answer,
+  AuditEntry,
+  ChunkInfo,
+  DocumentInfo,
+  ModelReport,
+  NewDocument,
+} from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -47,6 +54,14 @@ async function errorMessage(response: Response): Promise<string> {
   }
   return `Request failed (${response.status})`;
 }
+
+export const getModel = (token: string) => request<ModelReport>(token, "/v1/model");
+
+/** Asks the server to check the model. A result younger than `maxAgeSeconds` is reused. */
+export const checkModel = (token: string, maxAgeSeconds: number) =>
+  request<ModelReport>(token, `/v1/model/check?max_age_seconds=${maxAgeSeconds}`, {
+    method: "POST",
+  });
 
 export const ask = (token: string, question: string) =>
   request<Answer>(token, "/v1/chat", { method: "POST", body: { question } });

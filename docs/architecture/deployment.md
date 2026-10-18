@@ -55,7 +55,7 @@ Rules for any approach:
 
 ## Production secrets in AWS SSM Parameter Store
 
-The production API keys are stored as encrypted **SecureString** parameters in AWS Systems Manager Parameter Store, one per variable, under `/citedesk/prod/` (for example `/citedesk/prod/CITEDESK_OPENAI_API_KEY`). They use AWS's managed key `alias/aws/ssm`, the standard tier, and carry the tags `project=citedesk` and `environment=prod`. At the time of writing three exist, created in `us-west-2`: the OpenAI, Pinecone and LangSmith keys. Local development keeps using `.env`.
+The production API keys are stored as encrypted **SecureString** parameters in AWS Systems Manager Parameter Store, one per variable, under `/citedesk/prod/` (for example `/citedesk/prod/CITEDESK_OPENAI_API_KEY`). They use AWS's managed key `alias/aws/ssm`, the standard tier, and carry the tags `project=citedesk` and `environment=prod`. At the time of writing five exist, created in `us-west-2`: the OpenAI, Pinecone and LangSmith keys (encrypted), and two plain settings, `CITEDESK_WRITER` (`openai`) and `CITEDESK_OPENAI_MODEL` (`gpt-5.4-nano`). Non-secret settings are stored as readable `String` parameters. To switch the production model, edit `CITEDESK_OPENAI_MODEL` in `.env` and run `uv run citedesk ssm push --only CITEDESK_OPENAI_MODEL --overwrite`, then pull and restart. Local development keeps using `.env`.
 
 Manage them with the CiteDesk command. It never prints a value, and it passes values to the AWS command line through a private temporary file, not on the command line:
 

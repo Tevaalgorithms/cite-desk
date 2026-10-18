@@ -56,6 +56,7 @@ def create_api(citedesk: App, settings: Settings) -> FastAPI:
     api.state.citedesk = citedesk
     api.state.jwt_secret = settings.jwt_dev_secret
     api.state.rate_limiter = RateLimiter(settings.rate_limit_per_minute)
+    api.state.model_health = None  # set by the first "check connection"
 
     api.add_middleware(
         CORSMiddleware,

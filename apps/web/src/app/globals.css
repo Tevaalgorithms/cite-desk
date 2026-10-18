@@ -165,3 +165,21 @@ tr:last-child td { border-bottom: 0; }
 .license-edit { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 16rem; }
 .license-edit input { margin: 0; flex: 1 1 10rem; padding: 0.35rem 0.6rem; }
 button.small-button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+
+/* AI model status bar */
+.modelbar {
+  display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; min-height: 3rem;
+  padding: 0.5rem 1.25rem; background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.modelbar-label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.pill {
+  display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.8rem; border-radius: 6px;
+  font-size: 0.9rem; font-weight: 600; border: 1px solid transparent;
+}
+.pill .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: currentColor; }
+.pill.good { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.pill.bad { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.pill.neutral { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); border-color: color-mix(in srgb, var(--muted) 30%, transparent); }
+button.outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 0.3rem 0.9rem; font-weight: 600; }
+button.outline:hover:not(:disabled) { background: var(--accent-soft); }

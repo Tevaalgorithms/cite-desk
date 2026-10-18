@@ -11,6 +11,7 @@ import json
 import secrets
 import sys
 from pathlib import Path
+from typing import Any
 
 from citedesk.api.auth import issue_token
 from citedesk.bootstrap import App, build_app
@@ -199,14 +200,17 @@ def _ssm(args: argparse.Namespace) -> int:
 
 
 def _eval_retrieval(args: argparse.Namespace) -> int:
-    retrieval, suggestion, answers, threshold, _ = run_evaluation(
-        args.models, args.handbook, args.golden
-    )
-    summary = summarize(retrieval, answers)
+    overrides: dict[str, Any] = {}
+    if args.writer:
+        overrides["writer"] = args.writer
+    if args.openai_model:
+        overrides["openai_model"] = args.openai_model
+    run = run_evaluation(args.models, args.handbook, args.golden, **overrides)
+    summary = summarize(run.retrieval, run.answers)
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
-        print(format_report(args.models, retrieval, suggestion, answers, threshold))
+        print(format_report(args.models, run))
     if args.check is None:
         return 0
 
@@ -293,6 +297,10 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--models", choices=["offline", "local"], default="offline")
     evaluate.add_argument("--handbook", type=Path, default=Path("data/sample/acme-handbook.md"))
     evaluate.add_argument("--golden", type=Path, default=Path("evals/sample/golden.json"))
+    evaluate.add_argument(
+        "--writer", choices=["extractive", "openai"], help="answer writer to test"
+    )
+    evaluate.add_argument("--openai-model", help="OpenAI model to test (with --writer openai)")
     evaluate.add_argument("--json", action="store_true", help="print only the gate numbers as JSON")
     evaluate.add_argument(
         "--check",

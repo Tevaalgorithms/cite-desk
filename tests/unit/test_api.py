@@ -1,4 +1,5 @@
 import secrets
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -9,6 +10,7 @@ from citedesk.api.main import create_api
 from citedesk.api.ratelimit import RateLimiter
 from citedesk.bootstrap import App
 from citedesk.config import Settings
+from citedesk.domain.models import ModelHealth, ModelInfo, UsageSnapshot
 from citedesk.ingestion.fetching import UrlFetcher
 from citedesk.ingestion.service import IngestionService
 from tests.conftest import SAMPLE_HANDBOOK
@@ -197,6 +199,7 @@ def test_url_import_works_through_the_api(app: App) -> None:
         embedder=app.embedder,
         index=app.index,
         reranker=app.reranker,
+        model=app.model,
     )
     api = TestClient(create_api(wired, Settings(jwt_dev_secret=SECRET)))
     response = api.post(
@@ -252,6 +255,7 @@ def test_unexpected_errors_do_not_leak_details(app: App) -> None:
         embedder=app.embedder,
         index=app.index,
         reranker=app.reranker,
+        model=app.model,
     )
     api = TestClient(
         create_api(broken, Settings(jwt_dev_secret=SECRET)), raise_server_exceptions=False
@@ -325,3 +329,98 @@ def test_license_endpoint_rejects_blank_unknown_and_unauthorised_requests(
     )
     assert client.post(url, headers=_headers("analyst"), json={"license": "x"}).status_code == 403
     assert client.post(url, json={"license": "x"}).status_code == 401
+
+
+# --- which model answers ------------------------------------------------------------------
+
+
+class _FakeModel:
+    """A model status source that counts how often it is really checked."""
+
+    def __init__(self, state: str = "live") -> None:
+        self.checks = 0
+        self._state = state
+
+    def info(self) -> ModelInfo:
+        return ModelInfo(
+            writer="openai", provider="openai", model="gpt-test",
+            description="A language model writes the answer.",
+            retrieval="local embeddings",
+        )  # fmt: skip
+
+    def check(self) -> ModelHealth:
+        self.checks += 1
+        return ModelHealth(
+            state=self._state,  # type: ignore[arg-type]
+            detail="answered in 120 ms",
+            latency_ms=120,
+            checked_at=datetime.now(UTC),
+        )
+
+    def usage(self) -> UsageSnapshot:
+        return UsageSnapshot(
+            calls=self.checks, prompt_tokens=10 * self.checks, completion_tokens=self.checks
+        )
+
+
+def _with_model(app: App, model: object) -> TestClient:
+    wired = App(
+        ingestion=app.ingestion, answers=app.answers, repository=app.repository,
+        embedder=app.embedder, index=app.index, reranker=app.reranker,
+        model=model,  # type: ignore[arg-type]
+    )  # fmt: skip
+    return TestClient(
+        create_api(wired, Settings(jwt_dev_secret=SECRET, rate_limit_per_minute=1000))
+    )
+
+
+def test_the_built_in_writer_is_reported_as_offline_without_any_check(client: TestClient) -> None:
+    report = client.get("/v1/model", headers=_headers("analyst")).json()
+    assert report["info"]["writer"] == "extractive"
+    assert report["info"]["provider"] == "built-in"
+    assert report["health"]["state"] == "offline"
+    assert report["usage"] is None
+
+
+def test_model_endpoints_need_sign_in(client: TestClient) -> None:
+    assert client.get("/v1/model").status_code == 401
+    assert client.post("/v1/model/check").status_code == 401
+
+
+def test_a_remote_model_is_unchecked_until_someone_asks_then_reported_live(app: App) -> None:
+    model = _FakeModel()
+    api = _with_model(app, model)
+    before = api.get("/v1/model", headers=_headers("analyst")).json()
+    assert before["health"] is None  # never calls the model on a plain page load
+    assert before["info"]["model"] == "gpt-test"
+    assert model.checks == 0
+
+    after = api.post("/v1/model/check", headers=_headers("analyst")).json()
+    assert after["health"]["state"] == "live"
+    assert after["health"]["latency_ms"] == 120
+    assert api.get("/v1/model", headers=_headers("analyst")).json()["health"]["state"] == "live"
+
+
+def test_repeated_check_clicks_do_not_repeat_paid_requests(app: App) -> None:
+    model = _FakeModel()
+    api = _with_model(app, model)
+    for _ in range(5):
+        api.post("/v1/model/check", headers=_headers("analyst"))
+    assert model.checks == 1
+
+
+def test_a_failing_model_is_reported_as_an_error(app: App) -> None:
+    api = _with_model(app, _FakeModel(state="error"))
+    report = api.post("/v1/model/check", headers=_headers("analyst")).json()
+    assert report["health"]["state"] == "error"
+
+
+def test_the_page_may_accept_an_older_result_but_the_button_still_has_a_floor(app: App) -> None:
+    model = _FakeModel()
+    api = _with_model(app, model)
+    api.post("/v1/model/check", headers=_headers("analyst"))
+    api.post(
+        "/v1/model/check?max_age_seconds=0", headers=_headers("analyst")
+    )  # tries to force a call
+    api.post("/v1/model/check?max_age_seconds=3", headers=_headers("analyst"))
+    assert model.checks == 1  # the server never accepts a result younger than 15 seconds as stale

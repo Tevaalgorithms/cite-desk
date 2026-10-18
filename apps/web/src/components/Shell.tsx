@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Session } from "@/lib/auth";
+import { ModelStatusBar } from "./ModelStatusBar";
 
 interface Props {
   session: Session;
@@ -36,6 +37,7 @@ export function Shell({ session, active, onSignOut, children }: Props) {
           </button>
         </div>
       </header>
+      <ModelStatusBar token={session.token} />
       {children}
     </div>
   );

@@ -7,9 +7,17 @@ without touching either side.
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import NamedTuple, Protocol
+from typing import NamedTuple, Protocol, runtime_checkable
 
-from citedesk.domain.models import Chunk, Document, DocumentStatus, Passage
+from citedesk.domain.models import (
+    Chunk,
+    Document,
+    DocumentStatus,
+    ModelHealth,
+    ModelInfo,
+    Passage,
+    UsageSnapshot,
+)
 
 
 class Embedder(Protocol):
@@ -55,6 +63,21 @@ class AnswerWriter(Protocol):
 
         `strict=True` asks for a more conservative draft (quotes only) and is used on retry.
         """
+        ...
+
+
+@runtime_checkable
+class ModelStatus(Protocol):
+    """Implemented by writers that can describe themselves and report whether they work."""
+
+    def info(self) -> ModelInfo: ...
+
+    def check(self) -> ModelHealth:
+        """Make a small real request (if the writer uses a remote model) and report the result."""
+        ...
+
+    def usage(self) -> UsageSnapshot | None:
+        """Calls and tokens used since the process started, or None if not tracked."""
         ...
 
 

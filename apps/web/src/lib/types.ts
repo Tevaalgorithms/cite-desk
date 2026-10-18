@@ -47,6 +47,34 @@ export interface AuditEntry {
   target: string;
 }
 
+export interface ModelInfo {
+  writer: "openai" | "extractive" | "custom";
+  provider: string;
+  model: string;
+  description: string;
+  retrieval: string;
+}
+
+export interface ModelHealth {
+  state: "live" | "offline" | "error";
+  detail: string;
+  latency_ms: number | null;
+  checked_at: string | null;
+}
+
+export interface ModelUsage {
+  calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+}
+
+/** What GET /v1/model and POST /v1/model/check return. */
+export interface ModelReport {
+  info: ModelInfo;
+  health: ModelHealth | null; // null until the connection has been checked
+  usage: ModelUsage | null;
+}
+
 export interface NewDocument {
   title: string;
   content: string;

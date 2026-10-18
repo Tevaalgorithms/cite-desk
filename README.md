@@ -2,7 +2,7 @@
 
 CiteDesk is a company-handbook assistant: employees ask questions in plain language and get answers where **every sentence cites the exact handbook passage it came from**. If the handbook does not support an answer, CiteDesk says so instead of guessing.
 
-**Status:** backend core implemented and tested (ingestion, hybrid retrieval, citation verifier, LangGraph answer flow, CLI, retrieval and answer evaluation with quality gates). Runs on offline stand-ins by default or on real local embedding and cross-encoder models. Also a FastAPI layer with signed-in roles and rate limits. Also a Next.js web app: chat with citation chips and a source drawer, and an admin console. Not built yet: Pinecone and OpenAI adapters, RAGAS and DeepEval, OIDC sign-in, streaming answers, the quality dashboard.  
+**Status:** backend core implemented and tested (ingestion, hybrid retrieval, citation verifier, LangGraph answer flow, CLI, retrieval and answer evaluation with quality gates). Runs on offline stand-ins by default or on real local embedding and cross-encoder models. Also a FastAPI layer with signed-in roles and rate limits. Also a Next.js web app: chat with citation chips and a source drawer, and an admin console. Also an OpenAI answer writer with a status bar in the web app. Not built yet: the Pinecone index, LangSmith tracing, RAGAS and DeepEval, OIDC sign-in, streaming answers, the quality dashboard.  
 **Design baseline:** October 17, 2026  
 **Demo corpus:** an openly licensed company handbook, to be chosen after its reuse terms are verified (see [`docs/product/dataset-feasibility.md`](docs/product/dataset-feasibility.md)). Nothing has been downloaded or ingested.
 
@@ -123,6 +123,18 @@ npm run dev                      # http://localhost:3000
 Sign in by pasting a token from `uv run citedesk token --user you --role analyst` (use `--role admin` for the Admin page). As an admin, add `data/sample/acme-facilities-guide.md` (or the handbook), preview it, and publish it. If you added it without a license, use **Add license** in its table row first; then ask questions as an analyst and click a numbered citation to see the source passage. The API address defaults to `http://localhost:8000`; set `NEXT_PUBLIC_API_URL` to change it, and add the web address to `CITEDESK_CORS_ORIGINS` if it is not `http://localhost:3000`.
 
 Checks (from `apps/web`): `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run e2e`, which starts its own API and web server and drives a real browser through sign-in, upload, publish, a cited answer, the source drawer and unpublish (needs `npx playwright install chromium` once).
+
+### Let a language model write the answers (optional)
+
+The default writer quotes the best sentence from the sources: free, no key, but it cannot combine facts and sometimes answers a question from a nearby section. To use OpenAI instead, put your key and a model in `.env` (never in a committed file):
+
+```bash
+CITEDESK_WRITER=openai
+CITEDESK_OPENAI_API_KEY=<your key>
+CITEDESK_OPENAI_MODEL=gpt-5.4-nano       # the cheap default; gpt-5.4-mini is slightly more thorough
+```
+
+Every sentence is still checked against its source, and the app refuses rather than guesses. The top bar of the web app shows which model is answering ("Live · openai · gpt-5.4-nano") with a **Check connection** button. Measured quality and cost are in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md); a question costs a fraction of a cent. To test the real model: `CITEDESK_RUN_LLM_TESTS=1 uv run pytest tests/llm --no-cov` (a few cents).
 
 ### Use the real local models (optional)
 
