@@ -1,0 +1,102 @@
+[
+  {
+    "id": "h-a01",
+    "category": "paraphrase",
+    "question": "How many weeks of leave do new mothers and fathers get?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Parental leave"
+    ]
+  },
+  {
+    "id": "h-a02",
+    "category": "paraphrase",
+    "question": "Is there a minimum password length?",
+    "answerable": true,
+    "gold_sections": [
+      "Security > Passwords"
+    ]
+  },
+  {
+    "id": "h-a03",
+    "category": "paraphrase",
+    "question": "Do I have to keep receipts for small purchases?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Receipts"
+    ]
+  },
+  {
+    "id": "h-a04",
+    "category": "paraphrase",
+    "question": "How do I get my work computer on day one?",
+    "answerable": true,
+    "gold_sections": [
+      "Equipment > Laptops"
+    ]
+  },
+  {
+    "id": "h-a05",
+    "category": "paraphrase",
+    "question": "Can I carry unused vacation into next year?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Vacation"
+    ]
+  },
+  {
+    "id": "h-a06",
+    "category": "paraphrase",
+    "question": "Which hours must I be available?",
+    "answerable": true,
+    "gold_sections": [
+      "Working hours > Core hours"
+    ]
+  },
+  {
+    "id": "h-a07",
+    "category": "paraphrase",
+    "question": "What class of plane ticket can I book for a short trip?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Travel"
+    ]
+  },
+  {
+    "id": "h-a08",
+    "category": "paraphrase",
+    "question": "When does my login stop working after I leave?",
+    "answerable": true,
+    "gold_sections": [
+      "Leaving the company > Offboarding"
+    ]
+  },
+  {
+    "id": "h-u01",
+    "category": "unanswerable",
+    "question": "Is there a gym on site?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "h-u02",
+    "category": "unanswerable",
+    "question": "How many people work at the company?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "h-u03",
+    "category": "unanswerable",
+    "question": "What is the policy on parking?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "h-u04",
+    "category": "unanswerable",
+    "question": "Does the company match retirement contributions?",
+    "answerable": false,
+    "gold_sections": []
+  }
+]

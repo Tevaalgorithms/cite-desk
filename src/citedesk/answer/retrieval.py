@@ -52,7 +52,7 @@ class HybridRetriever:
         keyword_ids = [
             chunk_id for chunk_id, _ in corpus.keyword_index.search(question, self._candidate_limit)
         ]
-        question_vector = self._embedder.embed([question])[0]
+        question_vector = self._embedder.embed_query(question)
         vector_ids = [
             chunk_id
             for chunk_id, _ in self._index.search(question_vector, self._candidate_limit)

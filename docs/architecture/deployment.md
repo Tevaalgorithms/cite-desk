@@ -1,6 +1,6 @@
 # CiteDesk — Deployment
 
-**Decision for the MVP:** run on a single **Amazon Lightsail** instance with Docker Compose, chosen for low, flat cost (ADR-015). ECS or another managed container service is a later option, not part of the MVP. Nothing is provisioned yet.
+**Decision for the MVP:** run on a single **Amazon Lightsail** instance with Docker Compose, chosen for low, flat cost (ADR-015). ECS or another managed container service is a later option, not part of the MVP. Nothing is provisioned yet. The container images, the compose file and a post-deploy smoke test exist and were tested locally with Docker (see [`docs/operations/lightsail-deploy.md`](../operations/lightsail-deploy.md)); the Lightsail instance itself, HTTPS for a real domain and backups are untested.
 
 Three environments, one container image per service, and the same pipeline that runs the evaluation gates also deploys.
 
@@ -30,7 +30,7 @@ The relational data (documents, chunks, audit log, corpus version) needs a durab
 
 | Option | Monthly cost | Notes |
 | --- | --- | --- |
-| External free-tier Postgres | $0 | Matches the earlier preference. The provider and its limits (storage, pauses, connection counts) are **not yet checked** |
+| External free-tier Postgres | $0 | Matches the earlier preference. The code is tested on Postgres 16, but no provider has been chosen and its limits (storage, pauses, connection counts) are **not yet checked** |
 | Lightsail managed database | $15 for the smallest plan (1 GB RAM, 40 GB SSD) | The pricing page does not name the engine, so confirm that PostgreSQL is offered before choosing it |
 | SQLite file on the instance | $0 | Works for one instance only and needs snapshots for backup. Acceptable as a first deployment, not for a second instance |
 
@@ -52,6 +52,52 @@ Rules for any approach:
 - The application only reads `CITEDESK_*` environment variables (see `config.py`), so it works with all three.
 - Real values never appear in git, the Docker image, Terraform files or logs.
 - Use separate keys per environment, and rotate a key immediately if it appears anywhere it should not.
+
+## Production secrets in AWS SSM Parameter Store
+
+The production API keys are stored as encrypted **SecureString** parameters in AWS Systems Manager Parameter Store, one per variable, under `/citedesk/prod/` (for example `/citedesk/prod/CITEDESK_OPENAI_API_KEY`). They use AWS's managed key `alias/aws/ssm`, the standard tier, and carry the tags `project=citedesk` and `environment=prod`. At the time of writing five exist, created in `us-west-2`: the OpenAI, Pinecone and LangSmith keys (encrypted), and two plain settings, `CITEDESK_WRITER` (`openai`) and `CITEDESK_OPENAI_MODEL` (`gpt-5.4-nano`). Non-secret settings are stored as readable `String` parameters. To switch the production model, edit `CITEDESK_OPENAI_MODEL` in `.env` and run `uv run citedesk ssm push --only CITEDESK_OPENAI_MODEL --overwrite`, then pull and restart. Local development keeps using `.env`.
+
+Manage them with the CiteDesk command. It never prints a value, and it passes values to the AWS command line through a private temporary file, not on the command line:
+
+```bash
+uv run citedesk ssm push                    # store the three keys from .env (never overwrites by itself)
+uv run citedesk ssm push --overwrite        # replace them after you rotate a key
+uv run citedesk ssm push --only CITEDESK_DATABASE_URL    # store another variable by name
+uv run citedesk ssm push --generate-jwt-secret           # also store a new random sign-in secret
+uv run citedesk ssm list                    # names, type and version (no values)
+uv run citedesk ssm verify                  # do the stored values match .env? (by fingerprint)
+uv run citedesk ssm pull --out prod.env     # write an owner-only settings file for a deploy
+```
+
+**How the secrets reach a Lightsail instance.** The instance cannot read SSM by itself unless it has AWS credentials (see "Secrets on Lightsail" above). The MVP therefore uses SSM as the source of truth and copies the values out at deploy time, from a machine that does have AWS access (your laptop or the deploy job): run `citedesk ssm pull --out prod.env`, copy that file to the instance as `.env` with mode 600, then delete the local copy. The application still only reads `CITEDESK_*` environment variables.
+
+**Not yet created or tested**
+- `CITEDESK_JWT_DEV_SECRET` for production (the API will not start without it): create it with `--generate-jwt-secret` before the first deploy.
+- A least-privilege reader. Whoever runs `pull` needs read access to just this path. An untested starting point (replace the account id):
+
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": ["ssm:GetParametersByPath", "ssm:GetParameters", "ssm:GetParameter"],
+        "Resource": "arn:aws:ssm:us-west-2:<account-id>:parameter/citedesk/prod/*"
+      },
+      {
+        "Effect": "Allow",
+        "Action": "kms:Decrypt",
+        "Resource": "*",
+        "Condition": {"StringEquals": {"kms:ViaService": "ssm.us-west-2.amazonaws.com"}}
+      }
+    ]
+  }
+  ```
+- Rotation: there is no schedule. Rotate a key at its provider, update `.env`, then `citedesk ssm push --overwrite` and redeploy.
+
+### Production settings for the RAG pieces
+
+For production, store these as plain `String` parameters (`citedesk ssm push --only ...` after setting them in `.env`): `CITEDESK_ENVIRONMENT=prod` (this also gives production its own Pinecone namespace), `CITEDESK_MODELS=local`, `CITEDESK_VECTOR_INDEX=pinecone`. The API image must be built with the local models (`--build-arg EXTRAS="--extra models"`) because Pinecone's index size must match the embedding model. Keep `CITEDESK_LANGSMITH_TRACING` off in production until you have decided that handbook text may be sent to LangSmith (ADR-004, ADR-020).
 
 ## Delivery pipeline
 

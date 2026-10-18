@@ -7,13 +7,29 @@ without touching either side.
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import NamedTuple, Protocol
+from typing import NamedTuple, Protocol, runtime_checkable
 
-from citedesk.domain.models import Chunk, Document, DocumentStatus, Passage
+from citedesk.domain.models import (
+    Chunk,
+    Document,
+    DocumentStatus,
+    ModelHealth,
+    ModelInfo,
+    Passage,
+    UsageSnapshot,
+)
 
 
 class Embedder(Protocol):
-    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+    dimension: int  # numbers per vector; a vector database index must be created with this size
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        """Embed passages for indexing."""
+        ...
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a question. Some models use a different prompt for questions than for passages."""
+        ...
 
 
 class IndexItem(NamedTuple):
@@ -29,6 +45,12 @@ class VectorIndex(Protocol):
 
     def delete_document(self, document_id: str) -> None: ...
 
+    def ids(self) -> set[str]:
+        """Every chunk id currently stored."""
+        ...
+
+    def delete_ids(self, chunk_ids: Sequence[str]) -> None: ...
+
     def search(self, vector: Sequence[float], limit: int) -> list[tuple[str, float]]:
         """Return (chunk_id, similarity), best first."""
         ...
@@ -36,7 +58,10 @@ class VectorIndex(Protocol):
 
 class Reranker(Protocol):
     def rerank(self, question: str, passages: Sequence[Passage]) -> list[Passage]:
-        """Return the passages best-first, with `score` set to a 0..1 relevance."""
+        """Return the passages best-first, with `score` set to a relevance (higher is better).
+
+        The scale depends on the reranker, so the relevance threshold is set per backend.
+        """
         ...
 
 
@@ -46,6 +71,21 @@ class AnswerWriter(Protocol):
 
         `strict=True` asks for a more conservative draft (quotes only) and is used on retry.
         """
+        ...
+
+
+@runtime_checkable
+class ModelStatus(Protocol):
+    """Implemented by writers that can describe themselves and report whether they work."""
+
+    def info(self) -> ModelInfo: ...
+
+    def check(self) -> ModelHealth:
+        """Make a small real request (if the writer uses a remote model) and report the result."""
+        ...
+
+    def usage(self) -> UsageSnapshot | None:
+        """Calls and tokens used since the process started, or None if not tracked."""
         ...
 
 
@@ -61,6 +101,12 @@ class DocumentRepository(Protocol):
     def get_chunks(self, document_id: str) -> list[Chunk]: ...
 
     def list_documents(self) -> list[Document]: ...
+
+    def update_license(
+        self, document_id: str, *, license: str, terms_url: str | None, actor: str, when: datetime
+    ) -> None:
+        """Record the license and terms of a document, with an audit entry. Search is unaffected."""
+        ...
 
     def transition(
         self, document_id: str, status: DocumentStatus, *, actor: str, when: datetime

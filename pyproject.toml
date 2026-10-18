@@ -6,15 +6,22 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "GPL-3.0-only" }
 dependencies = [
+    "fastapi>=0.115,<1",
     "httpx>=0.27,<1",
     "langgraph>=0.2,<2",
+    "openai>=1.50,<3",
+    "pinecone>=5,<9",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.6,<3",
+    "pyjwt>=2.9,<3",
     "sqlalchemy>=2.0,<3",
+    "uvicorn>=0.32,<1",
 ]
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.2,<4"]
+# Local embedding model and cross-encoder (ONNX). Free, no API key; downloads model files on first use.
+models = ["fastembed>=0.4,<1"]
 
 [project.scripts]
 citedesk = "citedesk.cli:main"
@@ -51,6 +58,17 @@ strict = true
 files = ["src/citedesk"]
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+module = ["fastembed", "fastembed.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=citedesk --cov-report=term-missing"
+markers = [
+    "models: needs the local ONNX models (uv sync --extra models)",
+    "integration: needs a running Postgres (see tests/integration)",
+    "llm: calls the real OpenAI model, costs a few cents (see tests/llm)",
+    "pinecone: uses the real Pinecone index in a throwaway namespace (see tests/live_pinecone)",
+    "live_traces: sends traces to the real LangSmith in a throwaway project (see tests/live_langsmith)",
+]

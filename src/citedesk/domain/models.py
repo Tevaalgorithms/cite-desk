@@ -5,6 +5,7 @@ These are the only things the two sides have in common, besides the interfaces i
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -42,6 +43,38 @@ class Chunk(_Frozen):
     text: str
 
 
+class AuditEntry(_Frozen):
+    """One recorded admin action."""
+
+    at: datetime
+    actor: str
+    action: str
+    target: str
+
+
+class ModelInfo(_Frozen):
+    """Which model writes the answers, for the status bar in the web app."""
+
+    writer: str  # "openai" or "extractive"
+    provider: str  # for example "openai" or "built-in"
+    model: str  # for example "gpt-5.4-mini"
+    description: str  # one plain sentence about what it does
+    retrieval: str = ""  # the embedding model and reranker, for a tooltip
+
+
+class ModelHealth(_Frozen):
+    state: Literal["live", "offline", "error"]
+    detail: str
+    latency_ms: int | None = None
+    checked_at: datetime | None = None
+
+
+class UsageSnapshot(_Frozen):
+    calls: int
+    prompt_tokens: int
+    completion_tokens: int
+
+
 class Passage(_Frozen):
     """A chunk as the answer flow sees it: with its document title and a relevance score."""
 
@@ -68,6 +101,7 @@ class Answer(_Frozen):
     refused: bool = False
     refusal_reason: str | None = None
     corpus_version: int = 0
+    from_cache: bool = False  # True when an earlier identical question was answered
 
 
 def searchable_text(document_title: str, section_path: str, text: str) -> str:

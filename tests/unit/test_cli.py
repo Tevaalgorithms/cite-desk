@@ -48,5 +48,19 @@ def test_expected_problems_print_a_short_error_instead_of_a_traceback(
 
     errors = capsys.readouterr().err
     assert "license" in errors
-    assert "Same content already added" in errors
+    assert "already added" in errors
     assert "Traceback" not in errors
+
+
+def test_license_command_lets_a_draft_be_published(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    handbook = tmp_path / "handbook.md"
+    handbook.write_text(SAMPLE_HANDBOOK)
+    assert main(["add", str(handbook), "--title", "Acme"]) == 0
+    document_id = capsys.readouterr().out.split()[1]
+
+    assert main(["publish", document_id]) == 1  # no license yet
+    assert main(["license", document_id, "CC0"]) == 0
+    assert main(["license", document_id, "  "]) == 1  # blank is refused
+    assert main(["publish", document_id]) == 0

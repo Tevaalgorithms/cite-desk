@@ -12,6 +12,7 @@ from citedesk.ingestion.service import (
     DocumentNotFoundError,
     DuplicateDocumentError,
     IngestionService,
+    InvalidDocumentError,
     PublishBlockedError,
 )
 from citedesk.storage.dev_adapters import HashingEmbedder, InMemoryVectorIndex
@@ -161,3 +162,72 @@ def test_a_failed_index_update_leaves_the_document_unpublished(app: App) -> None
 def test_unpublishing_a_draft_changes_nothing(app: App) -> None:
     document = _add(app)
     assert app.ingestion.unpublish(document.id, actor="tester").status is DocumentStatus.DRAFT
+
+
+def test_the_admins_title_wins_over_the_title_in_the_file(app: App) -> None:
+    document = app.ingestion.add_text(
+        SAMPLE_HANDBOOK,
+        content_type="markdown",
+        title="My own name for it",
+        source_name="tests",
+        actor="tester",
+        license="CC0",
+    )
+    assert document.title == "My own name for it"
+
+
+def test_without_a_title_the_one_in_the_file_is_used(app: App) -> None:
+    document = app.ingestion.add_text(
+        SAMPLE_HANDBOOK,
+        content_type="markdown",
+        title=None,
+        source_name="tests",
+        actor="tester",
+        license="CC0",
+    )
+    assert document.title == "Acme Handbook"
+
+
+def test_a_license_can_be_added_to_a_draft_so_it_can_be_published(app: App) -> None:
+    document = _add(app, license=None)
+    with pytest.raises(PublishBlockedError):
+        app.ingestion.publish(document.id, actor="tester")
+
+    updated = app.ingestion.set_license(
+        document.id,
+        "  CC0 (synthetic sample)  ",
+        actor="alice",
+        terms_url=" https://example.com/terms ",
+    )
+
+    assert updated.license == "CC0 (synthetic sample)"  # surrounding spaces are removed
+    assert updated.terms_url == "https://example.com/terms"
+    assert app.ingestion.publish(document.id, actor="alice").status is DocumentStatus.PUBLISHED
+    assert app.repository.audit_actions(document.id) == ["add", "license", "published"]
+
+
+def test_an_empty_license_is_refused(app: App) -> None:
+    document = _add(app, license=None)
+    for blank in ("", "   "):
+        with pytest.raises(InvalidDocumentError):
+            app.ingestion.set_license(document.id, blank, actor="alice")
+    assert app.repository.get_document(document.id).license is None  # type: ignore[union-attr]
+
+
+def test_changing_a_license_does_not_change_what_is_searchable(published_app: App) -> None:
+    document = published_app.repository.list_documents()[0]
+    version = published_app.repository.corpus_version()
+    published_app.ingestion.set_license(document.id, "CC BY 4.0", actor="alice")
+    assert published_app.repository.corpus_version() == version
+    assert published_app.answers.ask("How many vacation days do I get?").refused is False
+
+
+def test_setting_the_license_of_an_unknown_document_raises(app: App) -> None:
+    with pytest.raises(DocumentNotFoundError):
+        app.ingestion.set_license("nope", "CC0", actor="alice")
+
+
+def test_the_duplicate_message_names_the_existing_document(app: App) -> None:
+    _add(app)
+    with pytest.raises(DuplicateDocumentError, match="Acme Handbook"):
+        _add(app)

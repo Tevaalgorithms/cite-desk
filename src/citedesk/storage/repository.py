@@ -9,12 +9,13 @@ Schema creation here is a stand-in for real migrations, which come in a later ti
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine, event, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-from citedesk.domain.models import Chunk, Document, DocumentStatus, Passage
+from citedesk.domain.models import AuditEntry, Chunk, Document, DocumentStatus, Passage
 
 
 class _Base(DeclarativeBase):
@@ -68,6 +69,12 @@ class _CorpusStateRow(_Base):
 _CORPUS_STATE_ID = 1
 
 
+def _enforce_sqlite_foreign_keys(connection: Any, _record: Any) -> None:
+    cursor = connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 def _as_utc(value: datetime | None) -> datetime | None:
     """SQLite returns naive datetimes; everything we store is UTC."""
     if value is not None and value.tzinfo is None:
@@ -107,6 +114,10 @@ class SqlRepository:
     @classmethod
     def from_url(cls, database_url: str) -> "SqlRepository":
         engine = create_engine(database_url)
+        if engine.dialect.name == "sqlite":
+            # SQLite ignores foreign keys unless asked, which hid an insert-order bug that
+            # Postgres caught. Enforce them so local runs and tests behave like production.
+            event.listen(engine, "connect", _enforce_sqlite_foreign_keys)
         _Base.metadata.create_all(engine)
         return cls(engine)
 
@@ -115,6 +126,7 @@ class SqlRepository:
     def add_document(self, document: Document, chunks: Sequence[Chunk], *, actor: str) -> None:
         with self._sessions.begin() as session:
             session.add(_DocumentRow(**document.model_dump(mode="python", exclude_none=False)))
+            session.flush()  # the document must exist before its chunks (Postgres enforces this)
             session.add_all(
                 _ChunkRow(
                     id=c.id,
@@ -152,6 +164,17 @@ class SqlRepository:
         with self._sessions() as session:
             rows = session.scalars(select(_DocumentRow).order_by(_DocumentRow.created_at))
             return [_to_document(row) for row in rows]
+
+    def update_license(
+        self, document_id: str, *, license: str, terms_url: str | None, actor: str, when: datetime
+    ) -> None:
+        with self._sessions.begin() as session:
+            row = session.get(_DocumentRow, document_id)
+            if row is None:
+                raise KeyError(document_id)
+            row.license = license
+            row.terms_url = terms_url
+            self._write_audit(session, when, actor, "license", document_id)
 
     def transition(
         self, document_id: str, status: DocumentStatus, *, actor: str, when: datetime
@@ -195,6 +218,20 @@ class SqlRepository:
             return _to_passage(found[0], found[1]) if found else None
 
     # --- helpers -------------------------------------------------------------------------
+
+    def audit_log(self, limit: int = 100) -> list[AuditEntry]:
+        """The most recent audit entries, newest first."""
+        with self._sessions() as session:
+            rows = session.scalars(select(_AuditRow).order_by(_AuditRow.id.desc()).limit(limit))
+            return [
+                AuditEntry(
+                    at=_as_utc(row.at) or row.at,
+                    actor=row.actor,
+                    action=row.action,
+                    target=row.target,
+                )
+                for row in rows
+            ]
 
     def audit_actions(self, target: str) -> list[str]:
         """Audit actions recorded for one target, oldest first (used by tests and the admin UI)."""

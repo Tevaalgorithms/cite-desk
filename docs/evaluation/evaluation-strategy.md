@@ -2,6 +2,74 @@
 
 Every pull request is scored on retrieval, answer quality and citations, and the build fails when a gate is missed. Deterministic checks catch most regressions for free; RAGAS and DeepEval add judged metrics on a small, cached set.
 
+## What is implemented today
+
+`citedesk eval-retrieval` (see the README) measures, without any API key (it always uses a throwaway database, an in-memory index and the built-in writer unless you pass `--writer openai`, whatever your `.env` says):
+
+- **Retrieval by stage:** keyword only, vector only, both fused, and fused + reranked. Reported as Recall@1, @3, @5 and MRR, split by question type (exact wording versus paraphrase).
+- **Answers:** whether the right section was cited, refusals of unanswerable questions, and "confidently wrong" answers (cited the wrong section, or answered an unanswerable question).
+- **Threshold calibration:** the top reranker score of every question, so the relevance threshold comes from data.
+- **Gates:** `--check evals/baselines.json` exits 1 if recall, MRR or correct answers fall below the recorded floor, or if confidently-wrong answers rise above the recorded ceiling. The offline backend is gated in the normal test suite; the local backend is gated by `tests/models` and by a separate CI job.
+
+Not implemented yet: RAGAS and DeepEval (they need an LLM judge and an API key), the 120-question golden set reviewed by a person, and the nightly ablation run. The sample sets are small (27, 12 and 12 questions), written by the same author as the handbook, and the handbook is synthetic, so they show that the pipeline works and which stage helps, not how it will perform on a real handbook.
+
+## Measured results on the sample handbook
+
+Real local models versus the offline stand-ins, final pipeline (fused + reranked), answerable questions:
+
+| Question set | What it is | Backend | Right section first | In top 3 | Answered correctly | Cited wrong section or answered an unanswerable question |
+| --- | --- | --- | --- | --- | --- | --- |
+| `golden` (21 answerable, 6 not) | Used to calibrate the threshold, so optimistic | offline | 0.81 | 0.90 | 13 of 21 | 1 |
+| | | local | 0.95 | 1.00 | 19 of 21 | 0 |
+| `heldout` (8 answerable, 4 not) | Used for diagnosis, now a validation set | offline | 0.63 | 0.63 | 3 of 8 | 1 |
+| | | local | 0.88 | 1.00 | 6 of 8 | 2 |
+| `test` (8 answerable, 4 not) | Unseen, run once | offline | 0.88 | 0.88 | 2 of 8 | 0 |
+| | | local | 1.00 | 1.00 | 8 of 8 | 1 |
+
+Reading it: the real models clearly beat the stand-ins on finding the right section and on answering paraphrased questions. Both still sometimes answer an unanswerable question that is close to a covered topic (2 of 14 unanswerable questions across the local runs). Before reranking, plain vector search beat the fused keyword-plus-vector ranking on paraphrases (Recall@1 0.90 versus 0.81 on `golden`), and the reranker repaired that, which is why hybrid retrieval is only worth it with a reranker here.
+
+## Choosing the answer model (measured 2026-10-17)
+
+The same 51 sample questions (all three sets) were answered with the real model, using the local embedding model and cross-encoder for retrieval. `citedesk eval-retrieval --models local --writer openai --openai-model <name>` repeats this.
+
+| | Quoting writer (no model) | `gpt-5.4-nano` | `gpt-5.4-mini` |
+| --- | --- | --- | --- |
+| Answerable questions answered correctly | 34 of 37 | 34 of 37 | 35 of 37 |
+| Cited a wrong section | 1 | 0 | 0 |
+| Unanswerable questions answered anyway | 3 of 14 | 0 of 14 | 0 of 14 |
+| Answer time per question | instant | about 0.9 s | about 0.9 s |
+| Tokens per question | none | about 300 in, 18 out | about 300 in, 18 out |
+| Approximate cost per question | none | about $0.00008 | about $0.0003 |
+
+- **What the model adds.** On questions the handbook can answer, all three are close (34, 34 and 35 of 37). The difference is on questions it cannot answer: the quoting writer answered 3 of 14 of them from a nearby passage (for example the cafeteria price), while both models refused all 14, because they can say the passages do not answer the question. They can also combine facts ("16 weeks, which can start up to 2 weeks before the birth"), which the quoting writer cannot.
+- **Nano versus mini.** They differ on 1 of 37 answerable questions, and the difference was a safe refusal ("Are two-factor logins mandatory?", where the handbook says only administrators must use it). The MVP default is therefore the cheaper `gpt-5.4-nano`. Switch with `CITEDESK_OPENAI_MODEL=gpt-5.4-mini`; no code change.
+- **Prices.** `gpt-5.4-nano`: $0.20 per million input tokens and $1.25 per million output, from [OpenAI's model page](https://developers.openai.com/docs/models/gpt-5.4-nano). `gpt-5.4-mini`: $0.75 and $4.50, from a third-party tracker only ([source](https://pricepertoken.com/pricing-page/model/openai-gpt-5.4-mini)), unconfirmed. The per-question costs above are my arithmetic from these prices and the measured tokens. Re-check prices before budgeting.
+- **Limits of this evidence.** 37 answerable and 14 unanswerable synthetic questions, written by the same author as the handbook, on short passages (about 300 prompt tokens per call). A real handbook has longer sections, so expect more tokens per question (up to roughly 6 passages of about 300 tokens each). Real-model scores on `golden` benefit from a threshold calibrated on that set. A single run per model; results at temperature 0 can still vary a little.
+
+## Multi-part questions and the agent decision
+
+`evals/sample/multistep.json` holds 12 questions that each need two or three sections. They are scored two ways, both reported by `citedesk eval-retrieval`:
+
+- **Coverage** (deterministic, gated): did retrieval hand the writer every needed section? **12 of 12.** This is the measure that decides whether an agent could help, because an agent only improves retrieval.
+- **Answer completeness** (depends on the writer): did the answer cite every needed section? `gpt-5.4-nano` 11 of 12, `gpt-5.4-mini` 10 of 12, built-in quoting writer 0 of 12. One of nano's misses is a flawed test question, not a failure.
+
+Conclusion (ADR-018): no agent is built; what handles multi-part questions is the language model combining the passages retrieval already supplies. If coverage ever drops below complete on a larger corpus, that is the evidence to build one.
+
+## Setting up judged evaluation: what you need to provide
+
+RAGAS and DeepEval score answers with a language model acting as judge. Nothing runs until these are decided:
+
+| Item | Why | Status |
+| --- | --- | --- |
+| A judge-model API key | The judge is a paid model call. The OpenAI key you already have is enough for both tools | Key exists in `.env` and SSM |
+| The key as a GitHub Actions secret (for example `OPENAI_API_KEY`) | CI cannot read your `.env` or SSM. Pull requests from forks never receive secrets, so they run only the free checks | Not added |
+| One pinned judge model | Pinning keeps scores comparable between runs. A cheaper model is fine for pull requests, a stronger one for the nightly run | Not chosen |
+| A monthly budget (suggested: $100) | Judged runs cost money. Two limits apply: a per-run cap on judge calls (`CITEDESK_EVAL_MAX_JUDGE_CALLS_PER_RUN`, 300 by default) and a monthly spending limit set in the OpenAI dashboard, which only you can set | Not set |
+| Which changes trigger a judged run | To avoid paying on every pull request: only changes to retrieval, prompts, the writer, the verifier or the evaluation code | Proposed in this document |
+| A person who reviews the golden questions | Judged scores are only as good as the questions and reference answers | Not assigned |
+
+The cost figures in this document are estimates from third-party price pages and must be rechecked against your actual model before you set the budget.
+
 ## Metrics and starting gates
 
 These thresholds are **starting guesses**. They are calibrated on the first measured baseline and then ratcheted up, never loosened to make a failing run pass.

@@ -1,0 +1,233 @@
+[
+  {
+    "id": "g-e01",
+    "category": "exact",
+    "question": "How many vacation days do I get?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Vacation"
+    ]
+  },
+  {
+    "id": "g-e02",
+    "category": "exact",
+    "question": "How many paid sick days do employees get?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Sick leave"
+    ]
+  },
+  {
+    "id": "g-e03",
+    "category": "exact",
+    "question": "How long is paid parental leave?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Parental leave"
+    ]
+  },
+  {
+    "id": "g-e04",
+    "category": "exact",
+    "question": "How many days a week may I work remotely?",
+    "answerable": true,
+    "gold_sections": [
+      "Working hours > Remote work"
+    ]
+  },
+  {
+    "id": "g-e05",
+    "category": "exact",
+    "question": "How much are meals reimbursed during business travel?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Meals"
+    ]
+  },
+  {
+    "id": "g-e06",
+    "category": "exact",
+    "question": "When must I report a suspected security incident?",
+    "answerable": true,
+    "gold_sections": [
+      "Security > Reporting incidents"
+    ]
+  },
+  {
+    "id": "g-e07",
+    "category": "exact",
+    "question": "How long must passwords be?",
+    "answerable": true,
+    "gold_sections": [
+      "Security > Passwords"
+    ]
+  },
+  {
+    "id": "g-e08",
+    "category": "exact",
+    "question": "When do I need to return my laptop?",
+    "answerable": true,
+    "gold_sections": [
+      "Equipment > Returning equipment"
+    ]
+  },
+  {
+    "id": "g-p01",
+    "category": "paraphrase",
+    "question": "How much time off do I get when I have a baby?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Parental leave"
+    ]
+  },
+  {
+    "id": "g-p02",
+    "category": "paraphrase",
+    "question": "What happens to my system access when I quit?",
+    "answerable": true,
+    "gold_sections": [
+      "Leaving the company > Offboarding"
+    ]
+  },
+  {
+    "id": "g-p03",
+    "category": "paraphrase",
+    "question": "Can I work from home?",
+    "answerable": true,
+    "gold_sections": [
+      "Working hours > Remote work"
+    ]
+  },
+  {
+    "id": "g-p04",
+    "category": "paraphrase",
+    "question": "How many holidays does the company observe?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Public holidays"
+    ]
+  },
+  {
+    "id": "g-p05",
+    "category": "paraphrase",
+    "question": "What do I do if my work laptop gets stolen?",
+    "answerable": true,
+    "gold_sections": [
+      "Equipment > Laptops"
+    ]
+  },
+  {
+    "id": "g-p06",
+    "category": "paraphrase",
+    "question": "Do I need a doctor's note when I'm ill?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Sick leave"
+    ]
+  },
+  {
+    "id": "g-p07",
+    "category": "paraphrase",
+    "question": "What are the rules for booking flights?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Travel"
+    ]
+  },
+  {
+    "id": "g-p08",
+    "category": "paraphrase",
+    "question": "How soon do I have to file my expense report?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Receipts"
+    ]
+  },
+  {
+    "id": "g-p09",
+    "category": "paraphrase",
+    "question": "Is alcohol covered when I travel for work?",
+    "answerable": true,
+    "gold_sections": [
+      "Expenses > Meals"
+    ]
+  },
+  {
+    "id": "g-p10",
+    "category": "paraphrase",
+    "question": "What should I do if I think my account was hacked?",
+    "answerable": true,
+    "gold_sections": [
+      "Security > Reporting incidents"
+    ]
+  },
+  {
+    "id": "g-p11",
+    "category": "paraphrase",
+    "question": "When am I expected to be online during the day?",
+    "answerable": true,
+    "gold_sections": [
+      "Working hours > Core hours"
+    ]
+  },
+  {
+    "id": "g-p12",
+    "category": "paraphrase",
+    "question": "Can contractors take paid time off?",
+    "answerable": true,
+    "gold_sections": [
+      "Time off > Vacation"
+    ]
+  },
+  {
+    "id": "g-p13",
+    "category": "paraphrase",
+    "question": "Who keeps this handbook up to date?",
+    "answerable": true,
+    "gold_sections": [
+      "About this handbook"
+    ]
+  },
+  {
+    "id": "g-u01",
+    "category": "unanswerable",
+    "question": "What is the capital of France?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "g-u02",
+    "category": "unanswerable",
+    "question": "What is the chief executive's salary?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "g-u03",
+    "category": "unanswerable",
+    "question": "Does the company offer stock options?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "g-u04",
+    "category": "unanswerable",
+    "question": "What is the dress code for the office?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "g-u05",
+    "category": "unanswerable",
+    "question": "What is the guest wifi password?",
+    "answerable": false,
+    "gold_sections": []
+  },
+  {
+    "id": "g-u06",
+    "category": "unanswerable",
+    "question": "How do I request a raise?",
+    "answerable": false,
+    "gold_sections": []
+  }
+]

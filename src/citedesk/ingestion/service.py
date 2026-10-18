@@ -17,12 +17,17 @@ from citedesk.ingestion.parsing import ContentType, parse
 
 class DuplicateDocumentError(ValueError):
     def __init__(self, existing: Document) -> None:
-        super().__init__(f"Same content already added as document {existing.id}")
+        title, status = existing.title, existing.status.value
+        super().__init__(f"This content was already added as \u201c{title}\u201d ({status}).")
         self.existing = existing
 
 
 class PublishBlockedError(ValueError):
     """The document may not be published yet, for example because its license is unknown."""
+
+
+class InvalidDocumentError(ValueError):
+    """A value the admin supplied cannot be used, for example an empty license."""
 
 
 class DocumentNotFoundError(KeyError):
@@ -52,16 +57,22 @@ class IngestionService:
         content: str,
         *,
         content_type: ContentType,
-        title: str,
+        title: str | None,
         source_name: str,
         actor: str,
         license: str | None = None,
         terms_url: str | None = None,
         source_url: str | None = None,
     ) -> Document:
-        """Parse, chunk and store content as a draft. It is not searchable yet."""
+        """Parse, chunk and store content as a draft. It is not searchable yet.
+
+        The admin's `title` is used if given; otherwise the title found in the content.
+        """
         parsed = parse(
-            content, content_type, fallback_title=title, min_chars=self._min_document_chars
+            content,
+            content_type,
+            fallback_title=title or "Untitled document",
+            min_chars=self._min_document_chars,
         )
         content_hash = hashlib.sha256(" ".join(content.split()).encode()).hexdigest()
         existing = self._repository.find_by_hash(content_hash)
@@ -70,7 +81,7 @@ class IngestionService:
 
         document = Document(
             id=uuid.uuid4().hex[:12],
-            title=parsed.title,
+            title=title or parsed.title,
             source_name=source_name,
             source_url=source_url,
             license=license,
@@ -108,13 +119,30 @@ class IngestionService:
         return self.add_text(
             page.text,
             content_type=page.content_type,
-            title=url,
+            title=None,  # use the page's own title
             source_name=source_name,
             actor=actor,
             license=license,
             terms_url=terms_url,
             source_url=page.url,
         )
+
+    def set_license(
+        self, document_id: str, license: str, *, actor: str, terms_url: str | None = None
+    ) -> Document:
+        """Record or correct a document's license, so a draft added without one can be published."""
+        cleaned = license.strip()
+        if not cleaned:
+            raise InvalidDocumentError("The license cannot be empty.")
+        self._require(document_id)
+        self._repository.update_license(
+            document_id,
+            license=cleaned,
+            terms_url=terms_url.strip() if terms_url and terms_url.strip() else None,
+            actor=actor,
+            when=datetime.now(UTC),
+        )
+        return self._require(document_id)
 
     def preview(self, document_id: str) -> list[Chunk]:
         """The chunks an admin reviews before publishing."""

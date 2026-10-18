@@ -21,10 +21,14 @@ class HashingEmbedder:
     """
 
     def __init__(self, dimension: int = 256) -> None:
+        self.dimension = dimension
         self._dimension = dimension
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         return [self._embed_one(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed_one(text)
 
     def _embed_one(self, text: str) -> list[float]:
         vector = [0.0] * self._dimension
@@ -53,6 +57,13 @@ class InMemoryVectorIndex:
             for chunk_id, item in self._items.items()
             if item.document_id != document_id
         }
+
+    def ids(self) -> set[str]:
+        return set(self._items)
+
+    def delete_ids(self, chunk_ids: Sequence[str]) -> None:
+        for chunk_id in chunk_ids:
+            self._items.pop(chunk_id, None)
 
     def search(self, vector: Sequence[float], limit: int) -> list[tuple[str, float]]:
         scored = [
