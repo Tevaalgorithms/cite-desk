@@ -67,13 +67,16 @@ def _app(tmp_path: Path, project: str, *, hide: bool) -> App:
     return app
 
 
-def _wait_for_runs(project: str, *, expect: int, seconds: float = 60.0) -> list[Any]:
+def _wait_for_runs(project: str, *, expect: int, seconds: float = 90.0) -> list[Any]:
+    """Wait for traces to arrive *and be fully ingested* (LangSmith fills in a trace's metadata and
+    outputs a little after the trace itself appears)."""
     client = Client(api_key=_LANGSMITH_KEY)
     deadline = time.monotonic() + seconds
     while True:
         runs = list(client.list_runs(project_name=project, is_root=True))
-        if len(runs) >= expect or time.monotonic() > deadline:
-            return runs
+        complete = [r for r in runs if r.outputs is not None and (r.extra or {}).get("metadata")]
+        if len(complete) >= expect or time.monotonic() > deadline:
+            return complete
         time.sleep(2)
 
 
