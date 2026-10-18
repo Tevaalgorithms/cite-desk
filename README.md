@@ -429,6 +429,7 @@ See [`docs/architecture/project-structure.md`](docs/architecture/project-structu
 8. [`docs/implementation/roadmap.md`](docs/implementation/roadmap.md) — phases, gates and definition of done.
 9. [`docs/architecture/adrs.md`](docs/architecture/adrs.md) — decisions and open questions.
 10. [`schemas/eval-case.example.json`](schemas/eval-case.example.json) and [`schemas/dataset-manifest.example.yaml`](schemas/dataset-manifest.example.yaml) — example shapes.
+11. [`docs/demo-script.md`](docs/demo-script.md) — a 25-minute demo script: the admin side, the question side, which RAG was chosen and why, and a deep dive.
 
 ## Run it locally
 
