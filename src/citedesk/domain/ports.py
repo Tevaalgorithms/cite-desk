@@ -114,6 +114,13 @@ class DocumentRepository(Protocol):
         """Change status, bump the corpus version and write an audit entry, atomically."""
         ...
 
+    def replace_published(self, old_id: str, new_id: str, *, actor: str, when: datetime) -> None:
+        """Retire a published document and publish its replacement in one transaction.
+
+        The corpus version goes up once, so no question ever sees both versions or neither.
+        """
+        ...
+
 
 class CorpusReader(Protocol):
     """Read side, used by the answer flow. Only published content is visible."""

@@ -427,3 +427,45 @@ def test_the_page_may_accept_an_older_result_but_the_button_still_has_a_floor(ap
     )  # tries to force a call
     api.post("/v1/model/check?max_age_seconds=3", headers=_headers("analyst"))
     assert model.checks == 1  # the server never accepts a result younger than 15 seconds as stale
+
+
+def test_an_admin_can_replace_a_published_document_in_one_step(client: TestClient) -> None:
+    admin = _headers("admin")
+    old_id = _add(client)
+    client.post(f"/v1/admin/documents/{old_id}/publish", headers=admin)
+
+    response = client.post(
+        f"/v1/admin/documents/{old_id}/replace",
+        headers=admin,
+        json={"content": SAMPLE_HANDBOOK.replace("20 days", "25 days")},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "published"
+    assert response.json()["id"] != old_id
+
+    statuses = {
+        d["id"]: d["status"] for d in client.get("/v1/admin/documents", headers=admin).json()
+    }
+    assert statuses[old_id] == "retired"
+    answer = client.post(
+        "/v1/chat", headers=_headers("analyst"), json={"question": "How many vacation days?"}
+    ).json()
+    assert "25 days" in answer["text"]
+
+
+def test_replace_rejects_drafts_unknown_documents_duplicates_and_non_admins(
+    client: TestClient,
+) -> None:
+    admin = _headers("admin")
+    draft_id = _add(client)
+    body = {"content": SAMPLE_HANDBOOK.replace("20 days", "25 days")}
+    url = f"/v1/admin/documents/{draft_id}/replace"
+    assert client.post(url, headers=admin, json=body).status_code == 409  # not published
+    assert (
+        client.post("/v1/admin/documents/nope/replace", headers=admin, json=body).status_code == 404
+    )
+    client.post(f"/v1/admin/documents/{draft_id}/publish", headers=admin)
+    assert client.post(url, headers=admin, json={"content": SAMPLE_HANDBOOK}).status_code == 409
+    assert client.post(url, headers=admin, json={"content": ""}).status_code == 422
+    assert client.post(url, headers=_headers("analyst"), json=body).status_code == 403
+    assert client.post(url, json=body).status_code == 401

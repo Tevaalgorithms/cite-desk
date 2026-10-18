@@ -18,6 +18,16 @@ class AddDocumentRequest(BaseModel):
     terms_url: str | None = Field(default=None, max_length=2000)
 
 
+class ReplaceDocumentRequest(BaseModel):
+    """A new version of a published document. Anything left out is kept from the old version."""
+
+    content: str = Field(min_length=1, max_length=2_000_000)
+    content_type: ContentType = "markdown"
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    license: str | None = Field(default=None, max_length=300)
+    terms_url: str | None = Field(default=None, max_length=2000)
+
+
 class SetLicenseRequest(BaseModel):
     license: str = Field(min_length=1, max_length=300)
     terms_url: str | None = Field(default=None, max_length=2000)

@@ -5,6 +5,7 @@ questions are answered.
 """
 
 import hashlib
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -13,6 +14,8 @@ from citedesk.domain.ports import DocumentRepository, Embedder, IndexItem, Vecto
 from citedesk.ingestion.chunking import chunk_document
 from citedesk.ingestion.fetching import UrlFetcher
 from citedesk.ingestion.parsing import ContentType, parse
+
+logger = logging.getLogger(__name__)
 
 
 class DuplicateDocumentError(ValueError):
@@ -126,6 +129,70 @@ class IngestionService:
             terms_url=terms_url,
             source_url=page.url,
         )
+
+    def replace_text(
+        self,
+        old_id: str,
+        content: str,
+        *,
+        content_type: ContentType,
+        actor: str,
+        title: str | None = None,
+        license: str | None = None,
+        terms_url: str | None = None,
+    ) -> Document:
+        """Swap a published document for a new version of it, in one step.
+
+        The new version keeps the old title, source and license unless the admin gives new ones.
+        Searches see the old version right up to the moment of the swap and the new one right
+        after it, never both and never neither. The old version is kept, marked retired.
+        """
+        old = self._require(old_id)
+        if old.status is not DocumentStatus.PUBLISHED:
+            raise PublishBlockedError(
+                "Only a published document can be replaced. Publish or add this one instead."
+            )
+        new = self.add_text(
+            content,
+            content_type=content_type,
+            title=title or old.title,
+            source_name=old.source_name,
+            actor=actor,
+            license=license or old.license,
+            terms_url=terms_url or old.terms_url,
+            source_url=old.source_url,
+        )
+        return self._swap(old, new, actor=actor)
+
+    def _swap(self, old: Document, new: Document, *, actor: str) -> Document:
+        if not (new.license and new.license.strip()):
+            raise PublishBlockedError(
+                "Record the document's license before publishing (see ADR-011)."
+            )
+        chunks = self._repository.get_chunks(new.id)
+        vectors = self._embedder.embed(
+            [searchable_text(new.title, c.section_path, c.text) for c in chunks]
+        )
+        try:
+            # The new vectors go in first. Searches ignore vectors of unpublished documents, so
+            # they stay invisible until the database swap below makes the new version live.
+            self._index.upsert(
+                [
+                    IndexItem(chunk.id, new.id, vector)
+                    for chunk, vector in zip(chunks, vectors, strict=True)
+                ]
+            )
+            self._repository.replace_published(old.id, new.id, actor=actor, when=datetime.now(UTC))
+        except Exception:
+            self._index.delete_document(new.id)  # leave the old version untouched
+            raise
+        try:
+            self._index.delete_document(old.id)
+        except Exception:
+            # The swap is done. Leftover vectors of the retired version are ignored by searches
+            # and removed by the repair that runs at every start.
+            logger.warning("Could not remove the vectors of retired document %s", old.id)
+        return self._require(new.id)
 
     def set_license(
         self, document_id: str, license: str, *, actor: str, terms_url: str | None = None

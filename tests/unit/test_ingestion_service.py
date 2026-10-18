@@ -231,3 +231,106 @@ def test_the_duplicate_message_names_the_existing_document(app: App) -> None:
     _add(app)
     with pytest.raises(DuplicateDocumentError, match="Acme Handbook"):
         _add(app)
+
+
+# --- replacing a published document with a new version -------------------------------------
+
+REVISED_HANDBOOK = SAMPLE_HANDBOOK.replace("20 days", "25 days")
+
+
+def _replace(app: App, old_id: str, content: str = REVISED_HANDBOOK):  # type: ignore[no-untyped-def]
+    return app.ingestion.replace_text(old_id, content, content_type="markdown", actor="tester")
+
+
+def test_replacing_a_document_makes_only_the_new_version_searchable(published_app: App) -> None:
+    old = published_app.repository.list_documents()[0]
+    new = _replace(published_app, old.id)
+
+    assert new.status is DocumentStatus.PUBLISHED
+    assert published_app.repository.get_document(old.id).status is DocumentStatus.RETIRED  # type: ignore[union-attr]
+    answer = published_app.answers.ask("How many vacation days do I get?")
+    assert "25 days" in answer.text
+    assert "20 days" not in answer.text
+    assert {p.document_id for p in published_app.repository.published_passages()} == {new.id}
+    assert all(i.startswith(new.id) for i in published_app.index.ids())
+
+
+def test_the_new_version_keeps_the_title_source_and_license_of_the_old_one(
+    published_app: App,
+) -> None:
+    old = published_app.repository.list_documents()[0]
+    new = _replace(published_app, old.id)
+    assert (new.title, new.source_name, new.license) == (old.title, old.source_name, old.license)
+
+
+def test_a_replacement_can_set_a_new_title_and_license(published_app: App) -> None:
+    old = published_app.repository.list_documents()[0]
+    new = published_app.ingestion.replace_text(
+        old.id,
+        REVISED_HANDBOOK,
+        content_type="markdown",
+        actor="tester",
+        title="Handbook 2027",
+        license="CC-BY-4.0",
+    )
+    assert (new.title, new.license) == ("Handbook 2027", "CC-BY-4.0")
+
+
+def test_a_replacement_bumps_the_corpus_version_once_and_is_audited(published_app: App) -> None:
+    old = published_app.repository.list_documents()[0]
+    before = published_app.repository.corpus_version()
+    new = _replace(published_app, old.id)
+    assert published_app.repository.corpus_version() == before + 1
+    assert published_app.repository.audit_actions(old.id) == [
+        "add",
+        "published",
+        f"replaced_by:{new.id}",
+    ]
+    assert published_app.repository.audit_actions(new.id) == ["add", f"replaces:{old.id}"]
+
+
+def test_only_a_published_document_can_be_replaced(app: App) -> None:
+    draft = _add(app)
+    with pytest.raises(PublishBlockedError, match="published"):
+        _replace(app, draft.id)
+    with pytest.raises(DocumentNotFoundError):
+        _replace(app, "nope")
+
+
+def test_replacing_with_identical_content_is_refused_and_changes_nothing(
+    published_app: App,
+) -> None:
+    old = published_app.repository.list_documents()[0]
+    before = published_app.repository.corpus_version()
+    with pytest.raises(DuplicateDocumentError):
+        _replace(published_app, old.id, content=SAMPLE_HANDBOOK)
+    assert published_app.repository.corpus_version() == before
+    assert published_app.repository.get_document(old.id).status is DocumentStatus.PUBLISHED  # type: ignore[union-attr]
+
+
+def test_a_failed_swap_leaves_the_old_version_live(published_app: App) -> None:
+    old = published_app.repository.list_documents()[0]
+    index = _BrokenIndex()
+    ingestion = IngestionService(published_app.repository, HashingEmbedder(), index)
+    with pytest.raises(ConnectionError):
+        ingestion.replace_text(old.id, REVISED_HANDBOOK, content_type="markdown", actor="tester")
+    assert published_app.repository.get_document(old.id).status is DocumentStatus.PUBLISHED  # type: ignore[union-attr]
+    assert old.id not in index.cleaned_up
+    assert published_app.answers.ask("How many vacation days do I get?").refused is False
+
+
+def test_leftover_vectors_of_the_old_version_do_not_fail_the_replacement(
+    published_app: App,
+) -> None:
+    class _CannotDelete(InMemoryVectorIndex):
+        def delete_document(self, document_id: str) -> None:
+            if document_id == old.id:
+                raise ConnectionError("delete failed")
+            super().delete_document(document_id)
+
+    old = published_app.repository.list_documents()[0]
+    index = _CannotDelete()
+    ingestion = IngestionService(published_app.repository, HashingEmbedder(), index)
+    new = ingestion.replace_text(old.id, REVISED_HANDBOOK, content_type="markdown", actor="tester")
+    assert new.status is DocumentStatus.PUBLISHED
+    assert published_app.repository.get_document(old.id).status is DocumentStatus.RETIRED  # type: ignore[union-attr]

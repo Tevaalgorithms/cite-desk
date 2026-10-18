@@ -64,3 +64,22 @@ def test_license_command_lets_a_draft_be_published(
     assert main(["license", document_id, "CC0"]) == 0
     assert main(["license", document_id, "  "]) == 1  # blank is refused
     assert main(["publish", document_id]) == 0
+
+
+def test_replace_swaps_a_published_document_for_a_new_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    handbook = tmp_path / "handbook.md"
+    handbook.write_text(SAMPLE_HANDBOOK)
+    assert main(["add", str(handbook), "--title", "Acme", "--license", "CC0", "--publish"]) == 0
+    old_id = capsys.readouterr().out.split()[1]
+
+    revised = tmp_path / "revised.md"
+    revised.write_text(SAMPLE_HANDBOOK.replace("20 days", "25 days"))
+    assert main(["replace", old_id, str(revised)]) == 0
+    assert main(["ask", "How many vacation days do I get?"]) == 0
+
+    output = capsys.readouterr().out
+    assert f"Replaced {old_id}" in output
+    assert "25 days" in output
+    assert "20 days" not in output.split("Replaced")[1]

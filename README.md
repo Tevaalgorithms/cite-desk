@@ -96,6 +96,12 @@ uv run citedesk unpublish <document-id>
 uv run citedesk ask "How many vacation days do I get?"   # now refused
 ```
 
+If the document was revised rather than withdrawn, swap in the new version in one step instead (the title, source and license carry over; the old version is kept as retired):
+
+```bash
+uv run citedesk replace <document-id> revised-handbook.md
+```
+
 ### 9. Try your own document
 
 ```bash
@@ -394,6 +400,14 @@ sequenceDiagram
     end
     Ing-->>UI: published
     Note over Repo: The BM25 keyword index is not built here. The answer package rebuilds it when it sees the new corpus version, and remembered answers stop being served.
+    opt a revised version of a published document
+        Admin->>UI: replace, with the new text
+        UI->>Ing: replace_text(old id, new text)
+        Ing->>Ing: add the new version as a draft (title, source and license carry over)
+        Ing->>Idx: write the new vectors (invisible until the swap)
+        Ing->>Repo: retire the old and publish the new in one transaction (corpus version +1, audit)
+        Ing->>Idx: delete the old vectors (leftovers are ignored and repaired at start)
+    end
     opt take a document down
         Admin->>UI: unpublish
         UI->>Ing: unpublish(id)

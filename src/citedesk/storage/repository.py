@@ -189,6 +189,19 @@ class SqlRepository:
             self._bump_corpus_version(session)
             self._write_audit(session, when, actor, status.value, document_id)
 
+    def replace_published(self, old_id: str, new_id: str, *, actor: str, when: datetime) -> None:
+        with self._sessions.begin() as session:
+            old = session.get(_DocumentRow, old_id)
+            new = session.get(_DocumentRow, new_id)
+            if old is None or new is None:
+                raise KeyError(old_id if old is None else new_id)
+            old.status = DocumentStatus.RETIRED.value
+            new.status = DocumentStatus.PUBLISHED.value
+            new.published_at = when
+            self._bump_corpus_version(session)
+            self._write_audit(session, when, actor, f"replaced_by:{new_id}", old_id)
+            self._write_audit(session, when, actor, f"replaces:{old_id}", new_id)
+
     # --- read side (CorpusReader) --------------------------------------------------------
 
     def corpus_version(self) -> int:

@@ -99,6 +99,19 @@ def _license(app: App, args: argparse.Namespace) -> int:
     return 0
 
 
+def _replace(app: App, args: argparse.Namespace) -> int:
+    document = app.ingestion.replace_text(
+        args.document_id,
+        args.path.read_text(encoding="utf-8"),
+        content_type=_CONTENT_TYPES.get(args.path.suffix.lower(), "text"),
+        actor=_ACTOR,
+        title=args.title,
+        license=args.license,
+    )
+    print(f"Replaced {args.document_id} with {document.id} (published; the old one is retired)")
+    return 0
+
+
 def _unpublish(app: App, args: argparse.Namespace) -> int:
     app.ingestion.unpublish(args.document_id, actor=_ACTOR)
     print("Unpublished")
@@ -126,6 +139,7 @@ def _ask(app: App, args: argparse.Namespace) -> int:
 _COMMANDS = {
     "add": _add,
     "publish": _publish,
+    "replace": _replace,
     "unpublish": _unpublish,
     "license": _license,
     "list": _list,
@@ -280,6 +294,14 @@ def _build_parser() -> argparse.ArgumentParser:
     license_ = commands.add_parser("license", help="record or correct a document's license")
     license_.add_argument("document_id")
     license_.add_argument("license")
+
+    replace = commands.add_parser(
+        "replace", help="swap a published document for a new version of it"
+    )
+    replace.add_argument("document_id", help="the published document to replace")
+    replace.add_argument("path", type=Path, help="the file with the new version")
+    replace.add_argument("--title", default=None, help="default: the old title")
+    replace.add_argument("--license", default=None, help="default: the old license")
 
     unpublish = commands.add_parser("unpublish", help="take a document out of search")
     unpublish.add_argument("document_id")

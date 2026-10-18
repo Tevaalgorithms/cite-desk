@@ -75,6 +75,11 @@ export interface ModelReport {
   usage: ModelUsage | null;
 }
 
+export interface NewVersion {
+  content: string;
+  content_type: "markdown" | "html" | "text";
+}
+
 export interface NewDocument {
   title: string;
   content: string;

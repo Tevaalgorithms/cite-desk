@@ -9,6 +9,7 @@ interface Props {
   onPreview: (document: DocumentInfo) => void;
   onPublish: (document: DocumentInfo) => void;
   onUnpublish: (document: DocumentInfo) => void;
+  onReplace: (document: DocumentInfo) => void;
   onSaveLicense: (document: DocumentInfo, license: string) => Promise<boolean>;
 }
 
@@ -18,6 +19,7 @@ export function DocumentTable({
   onPreview,
   onPublish,
   onUnpublish,
+  onReplace,
   onSaveLicense,
 }: Props) {
   if (documents.length === 0) {
@@ -51,14 +53,24 @@ export function DocumentTable({
                   Preview
                 </button>
                 {document.status === "published" ? (
-                  <button
-                    type="button"
-                    className="link danger"
-                    disabled={busyId === document.id}
-                    onClick={() => onUnpublish(document)}
-                  >
-                    Unpublish
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="link"
+                      disabled={busyId === document.id}
+                      onClick={() => onReplace(document)}
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      className="link danger"
+                      disabled={busyId === document.id}
+                      onClick={() => onUnpublish(document)}
+                    >
+                      Unpublish
+                    </button>
+                  </>
                 ) : (
                   document.status === "draft" && (
                     <button

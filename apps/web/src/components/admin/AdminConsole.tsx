@@ -15,11 +15,13 @@ import { AddDocumentForm } from "./AddDocumentForm";
 import { AuditList } from "./AuditList";
 import { DocumentTable } from "./DocumentTable";
 import { ImportUrlForm } from "./ImportUrlForm";
+import { ReplaceDocumentForm } from "./ReplaceDocumentForm";
 
 export function AdminConsole({ token }: { token: string }) {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [preview, setPreview] = useState<{ title: string; chunks: ChunkInfo[] } | null>(null);
+  const [replacing, setReplacing] = useState<DocumentInfo | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // Two separate messages: reloading the list must not erase the reason an action failed.
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -99,8 +101,21 @@ export function AdminConsole({ token }: { token: string }) {
         onPreview={(document) => void showPreview(document)}
         onPublish={(document) => void change(document, publishDocument)}
         onUnpublish={(document) => void change(document, unpublishDocument)}
+        onReplace={setReplacing}
         onSaveLicense={saveLicense}
       />
+
+      {replacing && (
+        <ReplaceDocumentForm
+          token={token}
+          document={replacing}
+          onCancel={() => setReplacing(null)}
+          onReplaced={() => {
+            setReplacing(null);
+            refresh();
+          }}
+        />
+      )}
 
       {preview && (
         <section className="card" aria-label="Preview">
