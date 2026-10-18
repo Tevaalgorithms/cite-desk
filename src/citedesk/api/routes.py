@@ -12,6 +12,7 @@ from citedesk.api.schemas import (
     AddDocumentRequest,
     ChatRequest,
     ImportUrlRequest,
+    ReplaceDocumentRequest,
     SetLicenseRequest,
 )
 from citedesk.bootstrap import App
@@ -162,6 +163,23 @@ def set_license(
     enforce(request, principal)
     return _app(request).ingestion.set_license(
         document_id, body.license, actor=principal.user_id, terms_url=body.terms_url
+    )
+
+
+@router.post("/v1/admin/documents/{document_id}/replace", status_code=status.HTTP_201_CREATED)
+def replace_document(
+    document_id: str, body: ReplaceDocumentRequest, request: Request, principal: Admin
+) -> Document:
+    """Swap a published document for a new version in one step. Returns the new document."""
+    enforce(request, principal)
+    return _app(request).ingestion.replace_text(
+        document_id,
+        body.content,
+        content_type=body.content_type,
+        actor=principal.user_id,
+        title=body.title,
+        license=body.license,
+        terms_url=body.terms_url,
     )
 
 

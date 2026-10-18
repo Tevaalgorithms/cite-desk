@@ -20,6 +20,8 @@ flowchart TD
     F -- yes --> G["7. Embed the chunks and write the vectors<br/>waits until the index can read them back"]
     G --> H["8. Mark published<br/>corpus version +1 · audit entry"]
     G -- "write or status change fails" --> X["Vectors removed<br/>the document stays a draft"]
+    H --> R{"9. A revised version arrives?"}
+    R -- yes --> S["Replace: add the new version as a draft<br/>write its vectors, then in one transaction<br/>retire the old and publish the new"]
 ```
 
 | Step | What happens | Failure handling |
@@ -32,6 +34,7 @@ flowchart TD
 | License gate | Publishing needs a recorded license (ADR-011). A missing one is added or corrected in the table (inline editor, `POST .../license`, or `citedesk license`) | The publish is refused with a clear message; the document stays a draft |
 | Embed and write | Chunk text is embedded by the local model and the vectors are written to the vector index (in memory or Pinecone). Pinecone applies writes late, so the write waits until the vectors can be read back | If the write or the status change fails the vectors are removed and the document stays a draft |
 | Publish | Status, corpus version and audit entry change in one transaction | Unpublish removes the vectors (and waits until they are gone), marks the document retired and bumps the version |
+| Replace | A revised version of a published document is added (title, source and license carry over), its vectors are written, then one transaction retires the old and publishes the new (corpus version +1 once), then the old vectors are deleted (ADR-021) | Before the swap a failure removes the new vectors and the old version stays live. If only the old vectors cannot be deleted the swap stands: searches ignore them and the repair at start removes them |
 
 The keyword (BM25) index is **not** built by ingestion. The answer package rebuilds it on the next question after it sees a new corpus version, which keeps the two packages independent and also stops remembered answers from being served. Page numbers, chunk exclusion and PDF or DOCX parsing are not built.
 

@@ -7,6 +7,7 @@ import type {
   DocumentInfo,
   ModelReport,
   NewDocument,
+  NewVersion,
 } from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -81,6 +82,12 @@ export const setLicense = (token: string, id: string, license: string) =>
   request<DocumentInfo>(token, `/v1/admin/documents/${id}/license`, {
     method: "POST",
     body: { license },
+  });
+
+export const replaceDocument = (token: string, id: string, version: NewVersion) =>
+  request<DocumentInfo>(token, `/v1/admin/documents/${id}/replace`, {
+    method: "POST",
+    body: version,
   });
 
 export const previewDocument = (token: string, id: string) =>

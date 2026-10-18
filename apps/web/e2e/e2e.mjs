@@ -7,7 +7,7 @@
 //   E2E_BASE_URL=http://localhost:8080 CITEDESK_JWT_DEV_SECRET=<its secret> npm run e2e
 import { chromium } from "playwright";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -239,11 +239,32 @@ await step("B14", "signing out clears the session", async () => {
   await page.getByLabel("Sign-in token").waitFor();
 });
 
+// ----------------------------------------------------------------------------- replace
+await step("B14b", "replacing a published document swaps in the new version in one step", async () => {
+  await signIn("admin", "/admin");
+  await page.locator("tr", { hasText: "acme-handbook" }).getByRole("button", { name: "Replace" }).click();
+  const revised = readFileSync(handbook, "utf8").replace("20 days", "25 days");
+  expect(revised.includes("25 days"), "the sample handbook no longer mentions 20 days");
+  await page.getByLabel("Or paste the new text").fill(revised);
+  await page.getByRole("button", { name: "Replace now" }).click();
+  await page.getByRole("form", { name: "Replace document" }).waitFor({ state: "detached", timeout: 8000 });
+  await page.locator("tr", { hasText: "acme-handbook" }).getByText("retired").waitFor({ timeout: 8000 });
+  await page.screenshot({ path: `${shots}/09-replaced.png` });
+  await signOut();
+  await signIn("analyst");
+  await ask("How many vacation days do I get?");
+  await page.getByText("25 days of paid vacation").first().waitFor({ timeout: 10000 });
+  expect(!(await page.getByText("20 days of paid vacation").count()), "the old version is still answering");
+});
+
 // ----------------------------------------------------------------------------- unpublish, layout
 await step("B15", "unpublishing removes the content from answers", async () => {
+  await signOut();
   await signIn("admin", "/admin");
-  await page.locator("tr", { hasText: "acme-handbook" }).getByRole("button", { name: "Unpublish" }).click();
-  await page.locator("tr", { hasText: "acme-handbook" }).getByText("retired").waitFor({ timeout: 8000 });
+  const published = page.locator("tr", { hasText: "acme-handbook" }).filter({ hasText: "published" });
+  await published.getByRole("button", { name: "Unpublish" }).click();
+  // The row stops being "published", so wait for that status to disappear from the table.
+  await page.locator("tr", { hasText: "acme-handbook" }).locator(".status.published").waitFor({ state: "detached", timeout: 8000 });
   await signOut();
   await signIn("analyst");
   await ask("How many vacation days do I get?");

@@ -110,3 +110,19 @@ def test_license_update_and_audit_on_postgres(pg_app: App) -> None:
     pg_app.ingestion.set_license(document.id, "CC0", actor="alice")
     assert pg_app.repository.get_document(document.id).license == "CC0"  # type: ignore[union-attr]
     assert pg_app.repository.audit_actions(document.id) == ["add", "license"]
+
+
+def test_replacing_a_published_document_on_postgres(pg_app: App) -> None:
+    old = pg_app.ingestion.publish(_add(pg_app).id, actor="tester")
+    new = pg_app.ingestion.replace_text(
+        old.id,
+        SAMPLE_HANDBOOK.replace("20 days", "25 days"),
+        content_type="markdown",
+        actor="tester",
+    )
+    assert new.status is DocumentStatus.PUBLISHED
+    retired = pg_app.repository.get_document(old.id)
+    assert retired is not None
+    assert retired.status is DocumentStatus.RETIRED
+    assert "25 days" in pg_app.answers.ask("How many vacation days do I get?").text
+    assert pg_app.repository.audit_actions(old.id)[-1] == f"replaced_by:{new.id}"
