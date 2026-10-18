@@ -8,6 +8,7 @@ citedesk eval-retrieval --models local --check evals/baselines.json
 
 import argparse
 import json
+import secrets
 import sys
 from pathlib import Path
 
@@ -23,6 +24,13 @@ from citedesk.ingestion.service import (
     InvalidDocumentError,
     PublishBlockedError,
 )
+from citedesk.ops.ssm import (
+    DEFAULT_PATH,
+    DEFAULT_SECRETS,
+    ParameterStore,
+    SsmError,
+    read_env_file,
+)
 
 _ACTOR = "cli"
 _CONTENT_TYPES: dict[str, ContentType] = {".md": "markdown", ".html": "html", ".htm": "html"}
@@ -32,6 +40,8 @@ _EXPECTED_ERRORS = (
     ParseError,
     DocumentNotFoundError,
     InvalidDocumentError,
+    SsmError,
+    FileNotFoundError,
 )
 
 
@@ -45,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
             return _token(args)
         if args.command == "serve":
             return _serve(args)
+        if args.command == "ssm":
+            return _ssm(args)
         return _COMMANDS[args.command](build_app(), args)
     except _EXPECTED_ERRORS as error:
         print(f"Error: {error}", file=sys.stderr)
@@ -137,6 +149,52 @@ def _serve(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- production secrets in AWS SSM Parameter Store ------------------------------------------
+
+
+def _store(args: argparse.Namespace) -> ParameterStore:
+    return ParameterStore(args.path)
+
+
+def _ssm(args: argparse.Namespace) -> int:
+    """Manage production secrets. Values are never printed."""
+    store = _store(args)
+    only = getattr(args, "only", None)  # not every ssm command has --only
+    names = tuple(only) if only else DEFAULT_SECRETS
+
+    if args.ssm_command == "push":
+        local = read_env_file(args.env_file)
+        values = {name: local.get(name, "") for name in names}
+        if args.generate_jwt_secret:
+            values["CITEDESK_JWT_DEV_SECRET"] = secrets.token_urlsafe(48)
+        missing = [name for name, value in values.items() if not value]
+        if missing:
+            print(f"Error: not set in {args.env_file}: {', '.join(missing)}", file=sys.stderr)
+            return 1
+        for name, outcome in store.push(values, overwrite=args.overwrite).items():
+            print(f"{outcome:<8} {store.parameter_name(name)}")
+        return 0
+
+    if args.ssm_command == "list":
+        infos = store.list_parameters()
+        for info in infos:
+            print(f"{info.name}  {info.type}  version {info.version}  {info.last_modified}")
+        if not infos:
+            print(f"Nothing stored under {args.path}")
+        return 0
+
+    if args.ssm_command == "verify":
+        local = read_env_file(args.env_file)
+        report = store.verify({name: local[name] for name in names if local.get(name)})
+        for name, state in report.items():
+            print(f"{state:<14} {name}")
+        return 0 if report and all(state == "match" for state in report.values()) else 1
+
+    written = store.write_env_file(args.out, only=only or None)
+    print(f"Wrote {len(written)} setting(s) to {args.out} (owner-only file): {', '.join(written)}")
+    return 0
+
+
 # --- evaluation ---------------------------------------------------------------------------
 
 
@@ -187,6 +245,38 @@ def _build_parser() -> argparse.ArgumentParser:
     ask.add_argument("question")
 
     commands.add_parser("list", help="list documents")
+
+    ssm = commands.add_parser("ssm", help="manage production secrets in AWS SSM Parameter Store")
+    ssm.add_argument(
+        "--path", default=DEFAULT_PATH, help=f"parameter path (default {DEFAULT_PATH})"
+    )
+    ssm_commands = ssm.add_subparsers(dest="ssm_command", required=True)
+    push = ssm_commands.add_parser(
+        "push", help="store secrets from .env as SecureString parameters"
+    )
+    push.add_argument("--env-file", type=Path, default=Path(".env"))
+    push.add_argument(
+        "--only", nargs="+", metavar="NAME", help="variables to store (default: the three API keys)"
+    )
+    push.add_argument(
+        "--overwrite", action="store_true", help="replace parameters that already exist"
+    )
+    push.add_argument(
+        "--generate-jwt-secret",
+        action="store_true",
+        help="also store a new random sign-in signing secret",
+    )
+    ssm_commands.add_parser("list", help="show stored parameter names and versions (no values)")
+    verify = ssm_commands.add_parser(
+        "verify", help="check stored values match .env, by fingerprint"
+    )
+    verify.add_argument("--env-file", type=Path, default=Path(".env"))
+    verify.add_argument("--only", nargs="+", metavar="NAME")
+    pull = ssm_commands.add_parser(
+        "pull", help="write stored values to an owner-only settings file"
+    )
+    pull.add_argument("--out", type=Path, required=True)
+    pull.add_argument("--only", nargs="+", metavar="NAME")
 
     token = commands.add_parser("token", help="print a development sign-in token")
     token.add_argument("--user", required=True)

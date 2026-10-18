@@ -28,6 +28,21 @@ Real local models versus the offline stand-ins, final pipeline (fused + reranked
 
 Reading it: the real models clearly beat the stand-ins on finding the right section and on answering paraphrased questions. Both still sometimes answer an unanswerable question that is close to a covered topic (2 of 14 unanswerable questions across the local runs). Before reranking, plain vector search beat the fused keyword-plus-vector ranking on paraphrases (Recall@1 0.90 versus 0.81 on `golden`), and the reranker repaired that, which is why hybrid retrieval is only worth it with a reranker here.
 
+## Setting up judged evaluation: what you need to provide
+
+RAGAS and DeepEval score answers with a language model acting as judge. Nothing runs until these are decided:
+
+| Item | Why | Status |
+| --- | --- | --- |
+| A judge-model API key | The judge is a paid model call. The OpenAI key you already have is enough for both tools | Key exists in `.env` and SSM |
+| The key as a GitHub Actions secret (for example `OPENAI_API_KEY`) | CI cannot read your `.env` or SSM. Pull requests from forks never receive secrets, so they run only the free checks | Not added |
+| One pinned judge model | Pinning keeps scores comparable between runs. A cheaper model is fine for pull requests, a stronger one for the nightly run | Not chosen |
+| A monthly budget (suggested: $100) | Judged runs cost money. Two limits apply: a per-run cap on judge calls (`CITEDESK_EVAL_MAX_JUDGE_CALLS_PER_RUN`, 300 by default) and a monthly spending limit set in the OpenAI dashboard, which only you can set | Not set |
+| Which changes trigger a judged run | To avoid paying on every pull request: only changes to retrieval, prompts, the writer, the verifier or the evaluation code | Proposed in this document |
+| A person who reviews the golden questions | Judged scores are only as good as the questions and reference answers | Not assigned |
+
+The cost figures in this document are estimates from third-party price pages and must be rechecked against your actual model before you set the budget.
+
 ## Metrics and starting gates
 
 These thresholds are **starting guesses**. They are calibrated on the first measured baseline and then ratcheted up, never loosened to make a failing run pass.

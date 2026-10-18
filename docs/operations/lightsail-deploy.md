@@ -30,7 +30,7 @@ Treat the Lightsail-specific steps below as a checklist to confirm, not a verifi
    git clone https://github.com/Tevaalgorithms/cite-desk.git
    cd cite-desk
    ```
-6. **Create the settings file** `.env` in the repository folder, readable only by you:
+6. **Create the settings file.** The API keys are stored in AWS SSM (see the deployment doc). From a machine with AWS access, run `uv run citedesk ssm pull --out prod.env`, add the lines below that are not secrets, copy the file to the instance as `.env`, and delete your local copy. Or write it by hand on the instance, readable only by you:
    ```bash
    umask 077
    cat > .env <<EOF2

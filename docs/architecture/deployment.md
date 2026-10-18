@@ -53,6 +53,48 @@ Rules for any approach:
 - Real values never appear in git, the Docker image, Terraform files or logs.
 - Use separate keys per environment, and rotate a key immediately if it appears anywhere it should not.
 
+## Production secrets in AWS SSM Parameter Store
+
+The production API keys are stored as encrypted **SecureString** parameters in AWS Systems Manager Parameter Store, one per variable, under `/citedesk/prod/` (for example `/citedesk/prod/CITEDESK_OPENAI_API_KEY`). They use AWS's managed key `alias/aws/ssm`, the standard tier, and carry the tags `project=citedesk` and `environment=prod`. At the time of writing three exist, created in `us-west-2`: the OpenAI, Pinecone and LangSmith keys. Local development keeps using `.env`.
+
+Manage them with the CiteDesk command. It never prints a value, and it passes values to the AWS command line through a private temporary file, not on the command line:
+
+```bash
+uv run citedesk ssm push                    # store the three keys from .env (never overwrites by itself)
+uv run citedesk ssm push --overwrite        # replace them after you rotate a key
+uv run citedesk ssm push --only CITEDESK_DATABASE_URL    # store another variable by name
+uv run citedesk ssm push --generate-jwt-secret           # also store a new random sign-in secret
+uv run citedesk ssm list                    # names, type and version (no values)
+uv run citedesk ssm verify                  # do the stored values match .env? (by fingerprint)
+uv run citedesk ssm pull --out prod.env     # write an owner-only settings file for a deploy
+```
+
+**How the secrets reach a Lightsail instance.** The instance cannot read SSM by itself unless it has AWS credentials (see "Secrets on Lightsail" above). The MVP therefore uses SSM as the source of truth and copies the values out at deploy time, from a machine that does have AWS access (your laptop or the deploy job): run `citedesk ssm pull --out prod.env`, copy that file to the instance as `.env` with mode 600, then delete the local copy. The application still only reads `CITEDESK_*` environment variables.
+
+**Not yet created or tested**
+- `CITEDESK_JWT_DEV_SECRET` for production (the API will not start without it): create it with `--generate-jwt-secret` before the first deploy.
+- A least-privilege reader. Whoever runs `pull` needs read access to just this path. An untested starting point (replace the account id):
+
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": ["ssm:GetParametersByPath", "ssm:GetParameters", "ssm:GetParameter"],
+        "Resource": "arn:aws:ssm:us-west-2:<account-id>:parameter/citedesk/prod/*"
+      },
+      {
+        "Effect": "Allow",
+        "Action": "kms:Decrypt",
+        "Resource": "*",
+        "Condition": {"StringEquals": {"kms:ViaService": "ssm.us-west-2.amazonaws.com"}}
+      }
+    ]
+  }
+  ```
+- Rotation: there is no schedule. Rotate a key at its provider, update `.env`, then `citedesk ssm push --overwrite` and redeploy.
+
 ## Delivery pipeline
 
 1. **Pull request:** lint, types, tests, verifier tests, retrieval and judged gates, secret scan, dependency audit (only the first three exist today).
