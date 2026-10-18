@@ -232,15 +232,16 @@ It prints Recall@1/3/5 and MRR for each retrieval stage, the relevance-threshold
 | `Only N characters of text found` | The file has too little text (error pages and empty files are rejected on purpose) |
 | An answer says it cannot answer | Check the document is published (`list`) and use words close to the handbook's. For example "parental leave" works where "time off for a baby" does not |
 
-## What CiteDesk will do
+## What CiteDesk does
 
-- **Chat:** streaming answers with citation chips; clicking a chip opens the source drawer at the exact passage.
-- **Hybrid retrieval:** in-process BM25 and Pinecone vector search, fused with Reciprocal Rank Fusion, then a cross-encoder reranker.
-- **Citation enforcement:** a deterministic verifier checks every sentence; one stricter retry, then an honest refusal.
-- **Admin console:** upload files or import URLs, preview chunks, publish, unpublish and roll back, with an audit log.
-- **Quality gates:** RAGAS and DeepEval run in GitHub Actions and fail the build below thresholds.
-- **Agentic RAG (optional, bounded):** only for multi-part questions, with a hard step budget. It stays only if the evaluation shows it helps.
-- **Not included:** Graph RAG (a handbook is mostly prose; see ADR-005).
+- **Chat** with an answer for each question, a numbered citation chip on every sentence, and a source drawer that highlights the quoted passage. Answers arrive complete, not streamed, because each sentence is checked before it is shown.
+- **Hybrid retrieval:** in-process BM25 and vector search (in memory or Pinecone), fused with Reciprocal Rank Fusion, then reranked by a cross-encoder.
+- **An answer writer:** a language model (OpenAI, `gpt-5.4-nano` by default) that may only use the numbered passages and says so when they do not answer, or a built-in writer that quotes the best sentence with no model at all.
+- **Citation enforcement:** a deterministic verifier checks every sentence, with one stricter retry and then an honest refusal.
+- **Admin console:** upload files or import web pages, preview the chunks, add or correct a license, publish and unpublish, with an audit log. Nothing is searchable until it is published with a license.
+- **An AI model status bar** showing which model answers and whether it is working, with a Check connection button.
+- **Quality gates** in GitHub Actions: lint, types, tests, a real-browser test, the Postgres tests, retrieval quality gates on the real models, an image build and a secret scan.
+- **Not built:** RAGAS and DeepEval (on hold), company sign-in (OIDC), streaming answers, saved conversations and feedback, a quality dashboard. **Decided against:** an agent loop (measured, not needed: ADR-018) and Graph RAG (ADR-005).
 
 ## Architecture
 
@@ -248,71 +249,101 @@ Solid boxes are built and tested. Dashed boxes are planned (see [`docs/implement
 
 ```mermaid
 graph TB
-    EMP(["Employee"])
-    ADM(["Admin"])
-    CLI["CLI - built<br/>citedesk add · publish · ask"]
-    WEB["Next.js chat and admin console - planned"]:::planned
-    API["FastAPI - planned<br/>auth / RBAC · rate limits · streaming"]:::planned
+    EMP(["Employee<br/>asks questions"])
+    ADM(["Admin<br/>manages documents"])
 
-    subgraph ING["Ingestion package - built"]
-        ADD["Add content<br/>file · URL import"] --> FETCH["Parse and check<br/>safe fetch · text checks · duplicate check"] --> CHUNK["Chunk by section<br/>keeps the section path"] --> PUB["Preview, then publish<br/>license required · draft until approved"] --> IDX["Index vectors<br/>bump corpus version · audit log"]
+    subgraph CLIENTS["Clients"]
+        WEB["Next.js web app<br/>chat · citation chips · source drawer<br/>admin console · AI model status bar"]
+        CLI["Command line<br/>add · publish · ask · license · token<br/>serve · eval-retrieval · ssm · pinecone"]
     end
 
-    subgraph ANS["Answer package - built"]
-        LOAD["Load published corpus<br/>rebuild BM25 when the version changes"]
-        BM["BM25 keyword search"]
-        VEC["Vector search"]
-        RRF["RRF fusion"]
-        RR["Rerank, keep best 6<br/>drop below relevance 0.5"]
-        subgraph FLOW["LangGraph flow, a new run for every question"]
-            GEN["Write answer<br/>[n] citation markers"]
-            VER["Citation verifier<br/>every sentence supported?"]
-            GEN --> VER
-            VER -- "fail: retry once" --> GEN
+    OIDC["Company sign-in (OIDC)<br/>planned"]:::planned
+    API["FastAPI<br/>dev sign-in tokens · roles · rate limits<br/>security headers · safe error messages"]
+
+    subgraph SERVICES["Application services (they never call each other)"]
+        subgraph ING["Ingestion package"]
+            direction TB
+            I1["Parse and check<br/>safe URL fetch · duplicate check"] --> I2["Chunk by section<br/>save as a draft"] --> I3["Preview · license required<br/>embed · index · publish"]
         end
-        ROUTE["Router and agent loop - planned<br/>multi-step questions"]:::planned
-        LOAD --> BM & VEC
-        BM --> RRF
-        VEC --> RRF
-        RRF --> RR --> GEN
+        subgraph ANS["Answer package"]
+            direction TB
+            A1["Answer cache<br/>exact match · versioned"] --> A2["Hybrid retrieval<br/>BM25 + vectors · fuse · rerank<br/>relevance threshold"] --> A3["LangGraph flow, new run per question<br/>write · verify · retry once · refuse"]
+        end
     end
 
-    SQL[("SQL database<br/>documents · chunks · audit log · corpus version<br/>SQLite and Postgres tested")]
-    VIDX[("Vector index<br/>in-memory stand-in · Pinecone planned")]
-    OUT(["Answer with citations<br/>or honest refusal"])
-    LS[("LangSmith traces - planned")]:::planned
+    subgraph STATE["State"]
+        SQL[("SQL database<br/>SQLite or Postgres<br/>documents · chunks · audit log · corpus version<br/>SOURCE OF TRUTH")]
+        VEC[("Vector index<br/>in memory or Pinecone<br/>repaired from the database at start")]
+    end
 
-    EMP --> CLI --> LOAD
-    ADM --> CLI --> ADD
-    EMP -.-> WEB -.-> API -.-> LOAD
-    VER -- pass --> OUT
-    VER -- "fail twice" --> OUT
-    RR -- "nothing relevant" --> OUT
-    IDX --> SQL
-    IDX --> VIDX
-    LOAD --- SQL
-    VEC --- VIDX
-    ANS -.-> LS
+    subgraph MODELS["Models"]
+        LOCAL["Local models, in the process<br/>embeddings: bge-small<br/>reranker: ms-marco MiniLM"]
+        WRITER["Answer writer<br/>OpenAI gpt-5.4-nano<br/>or the built-in quoting writer"]
+        VERIFY["Citation verifier<br/>deterministic checks, not a model"]
+    end
+
+    subgraph EXT["Outside services"]
+        OPENAI["OpenAI API"]
+        PINECONE["Pinecone<br/>when selected"]
+        LANGSMITH["LangSmith tracing<br/>opt-in, off by default"]
+        SSM["AWS SSM Parameter Store<br/>production keys and settings"]
+    end
+
+    EMP --> WEB
+    ADM --> WEB
+    ADM --> CLI
+    WEB -- "HTTPS, signed-in token" --> API
+    OIDC -.-> API
+    API --> SERVICES
+    CLI -- "calls the services directly" --> SERVICES
+    SERVICES --> STATE
+    SERVICES --> MODELS
+    WRITER --> OPENAI
+    VEC --> PINECONE
+    ANS -.-> LANGSMITH
+    CLI -. "ssm push and pull" .-> SSM
     classDef planned stroke-dasharray: 5 5,stroke:#888
 ```
 
-Ingestion and the answer package never call each other. They meet only through the SQL database, the vector index and the shared interfaces in `src/citedesk/domain/ports.py`.
+Ingestion and the answer package never call each other. They meet only through the SQL database, the vector index and the shared interfaces in `src/citedesk/domain/ports.py`, and a test enforces that. The database is the source of truth: the vector index is a copy that is repaired from it at every start.
+
+**What leaves your machine.** Questions and the retrieved passages go to OpenAI when the OpenAI writer is on. Vectors go to Pinecone when it is selected. Traces go to LangSmith only if you turn tracing on. The embedding model and reranker run locally.
+
+### How an answer can end
+
+| Outcome | When | Shown to the user as |
+| --- | --- | --- |
+| **Answer** | The writer's draft passed the verifier | The text with a numbered chip on every sentence |
+| `nothing_relevant_found` | No passage scored above the relevance threshold | "I couldn't find that in the handbook" |
+| `passages_do_not_answer` | Related passages exist, but the writer replied that they do not answer the question | "The handbook doesn't answer that" |
+| `could_not_verify_answer` | Two drafts both failed the verifier | "I couldn't verify an answer" |
+| `model_unavailable` | The OpenAI model could not be reached | "The AI model isn't reachable right now" |
+| `empty_question` | Blank question | "Ask a question" |
+
+Verified answers and the first two refusals are remembered by the cache; the other two are never cached, because they may succeed next time.
 
 ### Quality gate in CI
 
 ```mermaid
 graph LR
-    PR["Pull request"] --> S1["Lint · types · tests · secret scan<br/>built: .github/workflows/ci.yml"]
-    S1 --> S2["Dependency audit<br/>planned"]:::planned
-    S2 --> S3["Retrieval metrics and RAGAS + DeepEval<br/>planned"]:::planned
-    S3 --> G{"All gates<br/>pass?"}
-    G -- yes --> M["Merge allowed"]
-    G -- no --> F["Build fails<br/>metrics table on the PR"]
-    M --> N["Nightly: full set + ablation ladder<br/>planned"]:::planned
+    PR["Push or pull request"] --> CHECK & WEB & E2E & PG & MODELS & IMAGES & SECRETS
+    CHECK["check<br/>Ruff · strict mypy · pytest"]
+    WEB["web<br/>lint · types · unit tests · build"]
+    E2E["e2e<br/>real browser, API and web server"]
+    PG["postgres<br/>the workflow on Postgres 16"]
+    MODELS["local-models<br/>retrieval quality gates<br/>with the real models"]
+    IMAGES["images<br/>API and web images build"]
+    SECRETS["secrets<br/>gitleaks over the whole history"]
+    CHECK & WEB & E2E & PG & MODELS & IMAGES & SECRETS --> GATE{"All seven<br/>green?"}
+    GATE -- yes --> MERGE["Merge allowed"]
+    GATE -- no --> FIX["Fix before merging"]
+    DEP["Dependency audit<br/>planned"]:::planned
+    JUDGE["RAGAS + DeepEval gates<br/>on hold"]:::planned
+    NIGHT["Nightly full evaluation<br/>planned"]:::planned
     classDef planned stroke-dasharray: 5 5,stroke:#888
 ```
 
-Today CI runs Ruff, strict mypy and pytest, the web checks, a browser end-to-end test, the Postgres tests, the real-model quality gates, an image build and a gitleaks secret scan. The RAGAS and DeepEval gates are designed in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md) but not implemented.
+Tests that call real services (OpenAI, Pinecone, LangSmith) run only on request and never in CI: `tests/llm`, `tests/live_pinecone` and `tests/live_langsmith`. They use throwaway namespaces and projects and clean up after themselves. The RAGAS and DeepEval gates are designed in [`docs/evaluation/evaluation-strategy.md`](docs/evaluation/evaluation-strategy.md) but not implemented.
 
 ## Sequence diagrams
 
@@ -324,14 +355,16 @@ These follow the code in `src/citedesk/`. Steps marked planned do not exist yet.
 sequenceDiagram
     autonumber
     actor Admin
+    participant UI as Admin console, API or CLI
     participant Ing as IngestionService
     participant Fetch as UrlFetcher
     participant Repo as SQL repository
-    participant Emb as Embedder
+    participant Emb as Embedding model
     participant Idx as Vector index
 
-    Note over Admin,Ing: Today the CLI calls IngestionService directly. The admin console and API are planned.
-    Admin->>Ing: add_text (file) or add_url (web page)
+    Admin->>UI: add a file, paste text or give a web address
+    Note over UI: Through the API the admin role is required and requests are rate limited. The CLI calls the service directly.
+    UI->>Ing: add_text or add_url
     opt URL import
         Ing->>Fetch: fetch(url)
         Note over Fetch: http/https only, public IPs only, every redirect rechecked, size limit, robots.txt honoured
@@ -339,22 +372,32 @@ sequenceDiagram
     end
     Ing->>Ing: parse into sections (rejects pages with too little text)
     Ing->>Repo: find_by_hash (duplicate check)
-    Ing->>Ing: chunk each section
-    Ing->>Repo: add_document as draft with its chunks (audit: add)
-    Ing-->>Admin: document id
-    Admin->>Ing: preview(id)
-    Ing-->>Admin: chunks with section paths
-    Admin->>Ing: publish(id)
-    Ing->>Ing: check that a license is recorded
-    Ing->>Emb: embed chunk texts
-    Ing->>Idx: upsert vectors
+    Ing->>Ing: chunk each section (the admin's title wins over the page's own)
+    Ing->>Repo: add_document as a draft with its chunks (audit: add)
+    Ing-->>UI: the draft
+    opt the license is missing
+        Admin->>UI: add or correct the license
+        UI->>Ing: set_license (audit: license)
+    end
+    Admin->>UI: preview
+    UI->>Ing: preview(id)
+    Ing-->>UI: chunks with their section paths
+    Admin->>UI: publish
+    UI->>Ing: publish(id)
+    Ing->>Ing: refuse unless a license is recorded
+    Ing->>Emb: embed the chunk texts
+    Ing->>Idx: upsert the vectors
+    Note over Idx: Pinecone is eventually consistent, so the upsert waits until the vectors can be read back
     Ing->>Repo: transition to published (status, corpus version +1, audit) in one transaction
-    Note over Ing,Idx: If the upsert or the transition fails, the vectors are deleted and the document stays a draft
-    Ing-->>Admin: published
-    Note over Repo: The BM25 keyword index is not built here. The answer package rebuilds it when it sees the new corpus version.
+    alt the upsert or the transition fails
+        Ing->>Idx: delete the document's vectors, the document stays a draft
+    end
+    Ing-->>UI: published
+    Note over Repo: The BM25 keyword index is not built here. The answer package rebuilds it when it sees the new corpus version, and remembered answers stop being served.
     opt take a document down
-        Admin->>Ing: unpublish(id)
-        Ing->>Idx: delete the document's vectors
+        Admin->>UI: unpublish
+        UI->>Ing: unpublish(id)
+        Ing->>Idx: delete the document's vectors (waits until they are really gone)
         Ing->>Repo: transition to retired (corpus version +1, audit)
     end
 ```
@@ -365,50 +408,102 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Emp as Employee
+    participant UI as Chat page, API or CLI
     participant Ans as AnswerService
     participant Repo as SQL repository
+    participant Cache as Answer cache
     participant Flow as LangGraph flow
     participant Ret as HybridRetriever
     participant BM as BM25 index
+    participant Emb as Embedding model
     participant Idx as Vector index
-    participant RR as Reranker
+    participant RR as Cross-encoder reranker
     participant W as Answer writer
     participant Ver as Citation verifier
+    participant LS as LangSmith
 
-    Note over Emp,Ans: Today the CLI calls AnswerService directly. Auth, rate limits, the answer cache, saved conversations and LangSmith tracing are planned.
-    Emp->>Ans: ask(question)
+    Emp->>UI: ask a question
+    Note over UI: Through the API the sign-in token is checked, the role allowed and the rate limit applied
+    UI->>Ans: ask(question)
     Ans->>Repo: corpus_version()
     opt the version changed since the last question
         Ans->>Repo: published_passages()
         Ans->>BM: rebuild the keyword index
     end
-    Ans->>Flow: start a new flow for this question (no shared state)
-    Flow->>Ret: retrieve(question)
-    Ret->>BM: keyword search (top 20)
-    Ret->>Idx: embed the question, vector search (top 20)
-    Ret->>Ret: fuse with Reciprocal Rank Fusion (best 30)
-    Ret->>RR: rerank
-    RR-->>Ret: passages with relevance scores
-    Ret-->>Flow: best 6 passages
-    Note over Flow,Ans: Passages below the relevance threshold (0.5) are dropped
-    alt no passages left
-        Flow-->>Emp: refusal (nothing_relevant_found)
-    else passages found
-        loop up to 2 attempts, stops when verified
-            Flow->>W: write(question, passages, strict on the retry)
-            W-->>Flow: draft with [n] markers
-            Flow->>Ver: verify every sentence
-            Ver-->>Flow: pass, or the list of problems
+    Ans->>Cache: look up (question, corpus version, model label)
+    alt an identical question was answered before
+        Cache-->>Ans: the earlier answer
+        Ans-->>UI: the answer marked from_cache, with no model call and no trace
+    else not remembered
+        Ans->>Flow: start a new flow for this question, sharing no state
+        opt tracing is on
+            Flow-->>LS: send the trace (steps, timings, the model call)
         end
-        alt verified
-            Flow-->>Emp: answer with citations
-        else still unverified after 2 attempts
-            Flow-->>Emp: refusal (could_not_verify_answer)
+        Flow->>Ret: retrieve(question)
+        Ret->>BM: keyword search (top 20)
+        Ret->>Emb: embed the question
+        Ret->>Idx: vector search (top 20)
+        Ret->>Ret: fuse both lists with Reciprocal Rank Fusion (best 30)
+        Ret->>RR: rerank
+        RR-->>Ret: passages with relevance scores
+        Ret-->>Flow: the best 6
+        Note over Flow,Ans: Passages below the relevance threshold are dropped. The threshold is calibrated for the chosen models.
+        alt no passage is left
+            Flow-->>Ans: refusal nothing_relevant_found
+        else passages remain
+            loop up to 2 attempts, stops when a draft is verified
+                Flow->>W: write(question, passages), stricter on the retry
+                alt the model cannot be reached
+                    W-->>Flow: error, the flow ends with refusal model_unavailable
+                else the writer says the passages do not answer
+                    W-->>Flow: nothing, the flow ends with refusal passages_do_not_answer and no retry
+                else a draft
+                    W-->>Flow: draft with [n] markers
+                    Flow->>Ver: check every sentence
+                    Ver-->>Flow: pass, or the list of problems
+                end
+            end
+            alt drafts were written and one passed the check
+                Flow-->>Ans: the answer with its citations
+            else drafts were written and both failed the check
+                Flow-->>Ans: refusal could_not_verify_answer
+            end
         end
+        Ans->>Cache: remember verified answers and refusals that follow from the documents
+        Ans-->>UI: the answer or the refusal
     end
-    Emp->>Ans: source_passage(chunk id)
-    Ans->>Repo: get_passage (published content only)
-    Repo-->>Emp: the passage, section and document for the source drawer
+    UI-->>Emp: the answer with a citation chip on every sentence
+    Emp->>UI: click a chip
+    Note over UI: The source drawer opens from the citation already in the answer, so no further request is made
+```
+
+### Start-up and the model status bar
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Proc as API process
+    participant Repo as SQL repository
+    participant Idx as Vector index
+    participant W as Answer writer
+    participant UI as Web app
+
+    Proc->>Proc: read settings (environment variables first, then the .env file)
+    Proc->>Repo: connect and create any missing tables
+    Proc->>Proc: create the tracer (does nothing unless tracing is on)
+    Proc->>Proc: load the embedding model and reranker (or the stand-ins)
+    Proc->>W: create the writer (built-in, or OpenAI when a key is set)
+    Proc->>Idx: connect (Pinecone: create the index if missing, refuse one of the wrong size)
+    Proc->>Repo: published_passages()
+    Proc->>Idx: list its ids, add the missing vectors, delete the extra ones
+    Note over Idx: The database is the source of truth. A restarted in-memory index or a drifted Pinecone index is repaired here before the first question.
+    UI->>Proc: GET /v1/model
+    Proc-->>UI: provider, model, last check (none yet), usage
+    UI->>Proc: POST /v1/model/check (on page load a result up to 5 minutes old is fine)
+    Proc->>W: check(): one tiny real request, skipped if a recent result exists
+    W-->>Proc: live, or an error without any key or request text
+    Proc-->>UI: status bar shows Live, openai, gpt-5.4-nano
+    Note over UI,Proc: The Check connection button accepts a result no older than 15 seconds. The server enforces that floor, so clicks cannot run up a bill.
 ```
 
 ## Technology stack
@@ -416,48 +511,63 @@ sequenceDiagram
 | Layer | Choice |
 | --- | --- |
 | API | Python 3.12, FastAPI, Pydantic, `uv` |
-| Orchestration | LangGraph (answer flow, optional agent), LangChain (model and retriever integrations) |
-| Keyword search | In-process BM25 |
-| Vector search | Pinecone dense index |
-| Reranker | Cross-encoder (local ONNX model by default) |
-| LLM | OpenAI behind an interface so another provider can be added |
-| Metadata store | PostgreSQL |
-| Observability | LangSmith, OpenTelemetry, structured logs |
-| Evaluation | RAGAS, DeepEval, pytest, GitHub Actions |
+| Answer flow | LangGraph (retrieve, write, verify, retry or refuse). LangChain is not used directly |
+| Keyword search | BM25, implemented in-process |
+| Vector search | In-process index, or a Pinecone serverless index (`cite-desk`, 384 dimensions, cosine) |
+| Embeddings and reranker | Local ONNX models through fastembed: `bge-small-en-v1.5` and `ms-marco MiniLM` (word-matching stand-ins when `CITEDESK_MODELS=offline`) |
+| Answer writer | OpenAI (`gpt-5.4-nano` by default, any model by setting), or the built-in quoting writer |
+| Citation check | Deterministic verifier written for this project |
+| Database | SQLAlchemy over SQLite (local) or PostgreSQL 16 (both tested); tables are created at start, migrations are not built |
+| Tracing | LangSmith, opt-in. Structured logging and OpenTelemetry are not built |
+| Production secrets | AWS SSM Parameter Store, managed with `citedesk ssm` |
+| Evaluation | A project harness with golden, held-out, unseen and multi-part question sets and baseline gates. RAGAS and DeepEval are on hold |
 | Frontend | Next.js, React, TypeScript, plain CSS |
-| Quality tooling | Ruff, strict mypy, pytest, Vitest, Playwright, gitleaks, pip-audit, npm audit |
+| Deployment | Docker images, a Caddy proxy and Docker Compose, aimed at one Amazon Lightsail instance (nothing deployed yet) |
+| Quality tooling | Ruff, strict mypy, pytest, Vitest, Playwright, gitleaks. A dependency audit is planned |
 
 ## Repository structure
 
 ```text
 cite-desk/
-  apps/web/                 Next.js: chat, admin console (quality dashboard planned)
+  apps/web/                 Next.js app: chat, citation chips, source drawer, admin console,
+                            AI model status bar, browser end-to-end test (e2e/)
   src/citedesk/
-    domain/                 shared data models and interfaces (ports)      [built]
-    ingestion/              parse, chunk, safe URL fetch, publish workflow [built]
-    answer/                 BM25, fusion, retrieval, writer, verifier, LangGraph flow [built]
-    storage/                SQL repository, offline dev adapters           [built]
-    bootstrap.py, cli.py    wiring and command line                        [built]
-    api/                    FastAPI routes, dev sign-in tokens and roles, rate limits  [built]
-    llm/                    OpenAI, Pinecone and cross-encoder adapters    [planned]
-    evaluation/             RAGAS and DeepEval runners, thresholds         [planned]
-  evals/                    golden sets, thresholds, baselines
-  infrastructure/docker/    Dockerfiles, Caddy proxy config and compose file  [built]
-  infrastructure/terraform/ (planned)
+    domain/                 shared data models and interfaces (ports)
+    ingestion/              parse, chunk, safe URL fetch, draft / publish workflow
+    answer/                 BM25, fusion, retrieval, cache, writers, verifier, LangGraph flow
+    adapters/               local models, OpenAI writer, Pinecone index
+    storage/                SQL repository, in-memory stand-ins
+    api/                    FastAPI routes, sign-in tokens and roles, rate limits
+    evaluation/             retrieval and answer evaluation, coverage, thresholds, gates
+    ops/                    AWS SSM secrets tooling
+    bootstrap.py            the only place that wires ingestion and answers together
+    indexing.py             repairs the vector index from the database
+    tracing.py              optional LangSmith tracing
+    config.py, cli.py       settings and the command line
+  tests/
+    unit/                   fast tests, no network (the default run)
+    integration/            the workflow on a real Postgres (opt-in)
+    models/                 quality gates with the real local models
+    llm/, live_pinecone/, live_langsmith/   real OpenAI / Pinecone / LangSmith (opt-in, a few cents)
+  evals/                    golden, held-out, test and multi-part question sets, baselines.json
+  infrastructure/docker/    Dockerfiles, Caddy proxy config and compose file
   scripts/                  smoke.sh: post-deploy checks
-  .github/workflows/        CI, PR evaluation, nightly evaluation, deploy
-  docs/                     product, architecture, evaluation, implementation
+  .github/workflows/        ci.yml (seven jobs)
+  docs/                     product, architecture (ADRs 001 to 020), evaluation, operations
   schemas/                  example manifests and eval cases
+  data/sample/              synthetic handbooks used for trying it and for tests
 ```
 
 See [`docs/architecture/project-structure.md`](docs/architecture/project-structure.md) for the dependency rules between modules.
 
 ## Limits and honest caveats
 
-- **Specification only.** Thresholds in the evaluation strategy are starting guesses; they are calibrated on the first measured baseline.
-- **"Production-ready" means** the tests, gates, monitoring, backups and runbook exist and have been exercised. It does not mean the system has run under real load or on confidential data.
-- **LLM judges vary** between runs, so gates use tolerance bands and cached judgments.
-- **Corpus licensing is unverified.** No document is ingested until its terms are recorded in the source registry.
+- **Small, synthetic evidence.** Quality was measured on a made-up handbook (about 15 chunks) with question sets written by the same author. They show the pipeline works and which part helps; they do not show how it will perform on a real handbook. Thresholds were calibrated on the same small sample.
+- **Not deployed.** Nothing has run on a real server, with HTTPS on a real domain, under real load or with backups. Memory use of the local models on a 2 GB machine is unmeasured. "Production-ready" here means the tests, gates and runbook exist, not that it has run in production.
+- **It can still answer a question the handbook cannot.** A question about a topic the handbook covers nearby can occasionally be answered from the neighbouring passage (the language model refused all 14 such questions in testing, but the set is small). Every answer shows the cited passage so a reader can check.
+- **The language model sends data out.** With the OpenAI writer, each question and its retrieved passages are sent to OpenAI. Do not load confidential documents until the provider and retention decisions in ADR-004 are made. Tracing is off by default for the same reason.
+- **Sign-in is a development stand-in.** Users paste a signed token; production sign-in through an identity provider is planned.
+- **Corpus licensing is unverified** for any real handbook. A document cannot be published without a recorded license, but that records what an admin typed, not legal advice.
 - CiteDesk gives information from the handbook it is given. It is not HR, legal or compliance advice.
 
 ## License
